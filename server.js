@@ -125,6 +125,16 @@ wss.on('connection', (ws, req) => {
   });
 });
 
+// Render's free plan sleeps after 15 idle minutes. While a big screen is open,
+// ping our own public address now and then so the game stays awake.
+const SELF_URL = process.env.RENDER_EXTERNAL_URL || PUBLIC_URL;
+if (SELF_URL && typeof fetch === 'function') {
+  setInterval(() => {
+    const screenOpen = [...rooms.values()].some(r => r.host && r.host.readyState === 1);
+    if (screenOpen) fetch(SELF_URL + '/healthz').catch(() => {});
+  }, 10 * 60 * 1000);
+}
+
 // drop dead connections (phones that locked their screen, etc.)
 setInterval(() => {
   wss.clients.forEach(ws => {
