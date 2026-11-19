@@ -13,7 +13,9 @@ const PORT = Number(process.env.PORT) || 3000;
 // Optional: the address phones should use, e.g. https://dillo.example.com
 // (set this when running behind a custom domain or proxy). Otherwise it is detected.
 const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
-const PUB = path.join(__dirname, 'public');
+// the game page lives in public/ — but also works if index.html was uploaded next to server.js
+const PUB = fs.existsSync(path.join(__dirname, 'public', 'index.html')) ? path.join(__dirname, 'public') : __dirname;
+const ONLY_INDEX = PUB === __dirname;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' };
 
 function lanIP() {
@@ -27,6 +29,7 @@ const server = http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
   if (u.pathname === '/healthz') { res.writeHead(200); res.end('ok'); return; }
   const rel = u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname).replace(/^\/+/, '');
+  if (ONLY_INDEX && rel !== 'index.html') { res.writeHead(404); res.end('Not found'); return; }
   const file = path.resolve(PUB, rel);
   if (!file.startsWith(PUB + path.sep)) { res.writeHead(403); res.end(); return; }
   fs.readFile(file, (err, data) => {
