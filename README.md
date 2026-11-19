@@ -34,15 +34,17 @@ that hides the real address, set the environment variable `PUBLIC_URL` (for exam
 
 ## Playing
 
-- **Join:** scan a card's QR code. That armadillo is yours (Brisket, Queso, Tex, or Pecan).
-- **Start:** everyone taps **READY** on their phone, or press **Space**/click on the big screen to start right away.
-- **Race:** tap the phone button to hop, hold it for a bigger jump. Cones and scooters trip you up, pits
+- **Join:** scan the one QR code on the screen. You're randomly given a free armadillo (Brisket, Queso, Tex or Pecan).
+  If all four are taken, your phone waits in line and you're put in as soon as someone leaves.
+- **Start:** the next race starts 30 seconds after the first player joins. If everyone taps **READY**, it starts in 5.
+- **Race:** tap the phone button to hop, hold it for a bigger jump. Cones, scooters and robotaxis trip you up, pits
   send you back, food trucks are platforms, and tacos give you a boost.
-- **Rematch:** tap READY again on the results screen. Press Space on the big screen to go back to the lobby.
-- **Solo:** with no phones joined, press Space/click to race the computer using the keyboard.
-- **M** mutes the sound.
+- **Between races:** results show for 10 seconds, then the QR screen comes back with a fresh 30-second countdown —
+  players can leave or join. Stay on the phone page to keep racing.
+- **No keyboard needed** on the TV. Click the screen once after opening it to turn the sound on
+  (browsers block sound until someone clicks). Double-click for full screen. **M** mutes.
 
 ## Files
 
 - `server.js` — serves the game and relays phone taps to the big screen (WebSockets).
-- `public/index.html` — the whole game: the big-screen view and the phone controller.
+- `public/index.html` (or `index.html`) — the whole game: the big-screen view and the phone controller.
