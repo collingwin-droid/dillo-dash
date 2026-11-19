@@ -1,0 +1,3626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Dillo Dash: Austin</title>
+<style>
+html,body{margin:0;height:100%;background:#120826;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;font-family:system-ui,-apple-system,sans-serif}
+canvas#c{display:block;width:100vw;height:100vh;cursor:pointer}
+:root{--pc:#f07a2a}
+#pad{display:none;position:fixed;inset:0;flex-direction:column;align-items:center;justify-content:space-between;padding:max(18px,env(safe-area-inset-top)) 18px max(22px,env(safe-area-inset-bottom));box-sizing:border-box;color:#fff;
+ background:radial-gradient(120% 70% at 50% 0%,color-mix(in srgb,var(--pc) 45%,#1a0b3d) 0%,#170a3a 60%,#0e0522 100%)}
+#padTop{text-align:center}
+#padName{font:900 26px "Arial Black",system-ui,sans-serif;letter-spacing:.5px;color:var(--pc);text-shadow:0 2px 0 #2b0f4a}
+#padDillo{width:160px;height:80px;display:block;margin:6px auto 0}
+#padStatus{font-size:17px;line-height:1.35;max-width:22em;margin:10px auto 0;min-height:2.7em}
+#padBtn{width:min(78vw,62vh,360px);aspect-ratio:1;border-radius:50%;border:none;background:var(--pc);color:#1a0f30;font:900 clamp(34px,11vw,56px) "Arial Black",system-ui,sans-serif;
+ box-shadow:0 12px 0 color-mix(in srgb,var(--pc) 55%,#000),0 0 60px color-mix(in srgb,var(--pc) 50%,transparent);transition:transform .05s,box-shadow .05s;touch-action:none}
+#padBtn.down{transform:translateY(10px);box-shadow:0 2px 0 color-mix(in srgb,var(--pc) 55%,#000),0 0 30px color-mix(in srgb,var(--pc) 50%,transparent)}
+#padBtn.ready{background:#7cf2e6}
+#padBtn:disabled{opacity:.35}
+#padSub{font-size:13px;opacity:.7}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="pad">
+  <div id="padTop"><div id="padName"></div><canvas id="padDillo"></canvas><div id="padStatus"></div></div>
+  <button id="padBtn">JUMP</button>
+  <div id="padSub"></div>
+</div>
+<script>
+//---------------------------------------------------------------------
+//
+// QR Code Generator for JavaScript
+//
+// Copyright (c) 2009 Kazuhiko Arase
+//
+// URL: http://www.d-project.com/
+//
+// Licensed under the MIT license:
+//  http://www.opensource.org/licenses/mit-license.php
+//
+// The word 'QR Code' is registered trademark of
+// DENSO WAVE INCORPORATED
+//  http://www.denso-wave.com/qrcode/faqpatent-e.html
+//
+//---------------------------------------------------------------------
+
+var qrcode = function() {
+
+  //---------------------------------------------------------------------
+  // qrcode
+  //---------------------------------------------------------------------
+
+  /**
+   * qrcode
+   * @param typeNumber 1 to 40
+   * @param errorCorrectionLevel 'L','M','Q','H'
+   */
+  var qrcode = function(typeNumber, errorCorrectionLevel) {
+
+    var PAD0 = 0xEC;
+    var PAD1 = 0x11;
+
+    var _typeNumber = typeNumber;
+    var _errorCorrectionLevel = QRErrorCorrectionLevel[errorCorrectionLevel];
+    var _modules = null;
+    var _moduleCount = 0;
+    var _dataCache = null;
+    var _dataList = [];
+
+    var _this = {};
+
+    var makeImpl = function(test, maskPattern) {
+
+      _moduleCount = _typeNumber * 4 + 17;
+      _modules = function(moduleCount) {
+        var modules = new Array(moduleCount);
+        for (var row = 0; row < moduleCount; row += 1) {
+          modules[row] = new Array(moduleCount);
+          for (var col = 0; col < moduleCount; col += 1) {
+            modules[row][col] = null;
+          }
+        }
+        return modules;
+      }(_moduleCount);
+
+      setupPositionProbePattern(0, 0);
+      setupPositionProbePattern(_moduleCount - 7, 0);
+      setupPositionProbePattern(0, _moduleCount - 7);
+      setupPositionAdjustPattern();
+      setupTimingPattern();
+      setupTypeInfo(test, maskPattern);
+
+      if (_typeNumber >= 7) {
+        setupTypeNumber(test);
+      }
+
+      if (_dataCache == null) {
+        _dataCache = createData(_typeNumber, _errorCorrectionLevel, _dataList);
+      }
+
+      mapData(_dataCache, maskPattern);
+    };
+
+    var setupPositionProbePattern = function(row, col) {
+
+      for (var r = -1; r <= 7; r += 1) {
+
+        if (row + r <= -1 || _moduleCount <= row + r) continue;
+
+        for (var c = -1; c <= 7; c += 1) {
+
+          if (col + c <= -1 || _moduleCount <= col + c) continue;
+
+          if ( (0 <= r && r <= 6 && (c == 0 || c == 6) )
+              || (0 <= c && c <= 6 && (r == 0 || r == 6) )
+              || (2 <= r && r <= 4 && 2 <= c && c <= 4) ) {
+            _modules[row + r][col + c] = true;
+          } else {
+            _modules[row + r][col + c] = false;
+          }
+        }
+      }
+    };
+
+    var getBestMaskPattern = function() {
+
+      var minLostPoint = 0;
+      var pattern = 0;
+
+      for (var i = 0; i < 8; i += 1) {
+
+        makeImpl(true, i);
+
+        var lostPoint = QRUtil.getLostPoint(_this);
+
+        if (i == 0 || minLostPoint > lostPoint) {
+          minLostPoint = lostPoint;
+          pattern = i;
+        }
+      }
+
+      return pattern;
+    };
+
+    var setupTimingPattern = function() {
+
+      for (var r = 8; r < _moduleCount - 8; r += 1) {
+        if (_modules[r][6] != null) {
+          continue;
+        }
+        _modules[r][6] = (r % 2 == 0);
+      }
+
+      for (var c = 8; c < _moduleCount - 8; c += 1) {
+        if (_modules[6][c] != null) {
+          continue;
+        }
+        _modules[6][c] = (c % 2 == 0);
+      }
+    };
+
+    var setupPositionAdjustPattern = function() {
+
+      var pos = QRUtil.getPatternPosition(_typeNumber);
+
+      for (var i = 0; i < pos.length; i += 1) {
+
+        for (var j = 0; j < pos.length; j += 1) {
+
+          var row = pos[i];
+          var col = pos[j];
+
+          if (_modules[row][col] != null) {
+            continue;
+          }
+
+          for (var r = -2; r <= 2; r += 1) {
+
+            for (var c = -2; c <= 2; c += 1) {
+
+              if (r == -2 || r == 2 || c == -2 || c == 2
+                  || (r == 0 && c == 0) ) {
+                _modules[row + r][col + c] = true;
+              } else {
+                _modules[row + r][col + c] = false;
+              }
+            }
+          }
+        }
+      }
+    };
+
+    var setupTypeNumber = function(test) {
+
+      var bits = QRUtil.getBCHTypeNumber(_typeNumber);
+
+      for (var i = 0; i < 18; i += 1) {
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+        _modules[Math.floor(i / 3)][i % 3 + _moduleCount - 8 - 3] = mod;
+      }
+
+      for (var i = 0; i < 18; i += 1) {
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+        _modules[i % 3 + _moduleCount - 8 - 3][Math.floor(i / 3)] = mod;
+      }
+    };
+
+    var setupTypeInfo = function(test, maskPattern) {
+
+      var data = (_errorCorrectionLevel << 3) | maskPattern;
+      var bits = QRUtil.getBCHTypeInfo(data);
+
+      // vertical
+      for (var i = 0; i < 15; i += 1) {
+
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+
+        if (i < 6) {
+          _modules[i][8] = mod;
+        } else if (i < 8) {
+          _modules[i + 1][8] = mod;
+        } else {
+          _modules[_moduleCount - 15 + i][8] = mod;
+        }
+      }
+
+      // horizontal
+      for (var i = 0; i < 15; i += 1) {
+
+        var mod = (!test && ( (bits >> i) & 1) == 1);
+
+        if (i < 8) {
+          _modules[8][_moduleCount - i - 1] = mod;
+        } else if (i < 9) {
+          _modules[8][15 - i - 1 + 1] = mod;
+        } else {
+          _modules[8][15 - i - 1] = mod;
+        }
+      }
+
+      // fixed module
+      _modules[_moduleCount - 8][8] = (!test);
+    };
+
+    var mapData = function(data, maskPattern) {
+
+      var inc = -1;
+      var row = _moduleCount - 1;
+      var bitIndex = 7;
+      var byteIndex = 0;
+      var maskFunc = QRUtil.getMaskFunction(maskPattern);
+
+      for (var col = _moduleCount - 1; col > 0; col -= 2) {
+
+        if (col == 6) col -= 1;
+
+        while (true) {
+
+          for (var c = 0; c < 2; c += 1) {
+
+            if (_modules[row][col - c] == null) {
+
+              var dark = false;
+
+              if (byteIndex < data.length) {
+                dark = ( ( (data[byteIndex] >>> bitIndex) & 1) == 1);
+              }
+
+              var mask = maskFunc(row, col - c);
+
+              if (mask) {
+                dark = !dark;
+              }
+
+              _modules[row][col - c] = dark;
+              bitIndex -= 1;
+
+              if (bitIndex == -1) {
+                byteIndex += 1;
+                bitIndex = 7;
+              }
+            }
+          }
+
+          row += inc;
+
+          if (row < 0 || _moduleCount <= row) {
+            row -= inc;
+            inc = -inc;
+            break;
+          }
+        }
+      }
+    };
+
+    var createBytes = function(buffer, rsBlocks) {
+
+      var offset = 0;
+
+      var maxDcCount = 0;
+      var maxEcCount = 0;
+
+      var dcdata = new Array(rsBlocks.length);
+      var ecdata = new Array(rsBlocks.length);
+
+      for (var r = 0; r < rsBlocks.length; r += 1) {
+
+        var dcCount = rsBlocks[r].dataCount;
+        var ecCount = rsBlocks[r].totalCount - dcCount;
+
+        maxDcCount = Math.max(maxDcCount, dcCount);
+        maxEcCount = Math.max(maxEcCount, ecCount);
+
+        dcdata[r] = new Array(dcCount);
+
+        for (var i = 0; i < dcdata[r].length; i += 1) {
+          dcdata[r][i] = 0xff & buffer.getBuffer()[i + offset];
+        }
+        offset += dcCount;
+
+        var rsPoly = QRUtil.getErrorCorrectPolynomial(ecCount);
+        var rawPoly = qrPolynomial(dcdata[r], rsPoly.getLength() - 1);
+
+        var modPoly = rawPoly.mod(rsPoly);
+        ecdata[r] = new Array(rsPoly.getLength() - 1);
+        for (var i = 0; i < ecdata[r].length; i += 1) {
+          var modIndex = i + modPoly.getLength() - ecdata[r].length;
+          ecdata[r][i] = (modIndex >= 0)? modPoly.getAt(modIndex) : 0;
+        }
+      }
+
+      var totalCodeCount = 0;
+      for (var i = 0; i < rsBlocks.length; i += 1) {
+        totalCodeCount += rsBlocks[i].totalCount;
+      }
+
+      var data = new Array(totalCodeCount);
+      var index = 0;
+
+      for (var i = 0; i < maxDcCount; i += 1) {
+        for (var r = 0; r < rsBlocks.length; r += 1) {
+          if (i < dcdata[r].length) {
+            data[index] = dcdata[r][i];
+            index += 1;
+          }
+        }
+      }
+
+      for (var i = 0; i < maxEcCount; i += 1) {
+        for (var r = 0; r < rsBlocks.length; r += 1) {
+          if (i < ecdata[r].length) {
+            data[index] = ecdata[r][i];
+            index += 1;
+          }
+        }
+      }
+
+      return data;
+    };
+
+    var createData = function(typeNumber, errorCorrectionLevel, dataList) {
+
+      var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, errorCorrectionLevel);
+
+      var buffer = qrBitBuffer();
+
+      for (var i = 0; i < dataList.length; i += 1) {
+        var data = dataList[i];
+        buffer.put(data.getMode(), 4);
+        buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+        data.write(buffer);
+      }
+
+      // calc num max data.
+      var totalDataCount = 0;
+      for (var i = 0; i < rsBlocks.length; i += 1) {
+        totalDataCount += rsBlocks[i].dataCount;
+      }
+
+      if (buffer.getLengthInBits() > totalDataCount * 8) {
+        throw 'code length overflow. ('
+          + buffer.getLengthInBits()
+          + '>'
+          + totalDataCount * 8
+          + ')';
+      }
+
+      // end code
+      if (buffer.getLengthInBits() + 4 <= totalDataCount * 8) {
+        buffer.put(0, 4);
+      }
+
+      // padding
+      while (buffer.getLengthInBits() % 8 != 0) {
+        buffer.putBit(false);
+      }
+
+      // padding
+      while (true) {
+
+        if (buffer.getLengthInBits() >= totalDataCount * 8) {
+          break;
+        }
+        buffer.put(PAD0, 8);
+
+        if (buffer.getLengthInBits() >= totalDataCount * 8) {
+          break;
+        }
+        buffer.put(PAD1, 8);
+      }
+
+      return createBytes(buffer, rsBlocks);
+    };
+
+    _this.addData = function(data, mode) {
+
+      mode = mode || 'Byte';
+
+      var newData = null;
+
+      switch(mode) {
+      case 'Numeric' :
+        newData = qrNumber(data);
+        break;
+      case 'Alphanumeric' :
+        newData = qrAlphaNum(data);
+        break;
+      case 'Byte' :
+        newData = qr8BitByte(data);
+        break;
+      case 'Kanji' :
+        newData = qrKanji(data);
+        break;
+      default :
+        throw 'mode:' + mode;
+      }
+
+      _dataList.push(newData);
+      _dataCache = null;
+    };
+
+    _this.isDark = function(row, col) {
+      if (row < 0 || _moduleCount <= row || col < 0 || _moduleCount <= col) {
+        throw row + ',' + col;
+      }
+      return _modules[row][col];
+    };
+
+    _this.getModuleCount = function() {
+      return _moduleCount;
+    };
+
+    _this.make = function() {
+      if (_typeNumber < 1) {
+        var typeNumber = 1;
+
+        for (; typeNumber < 40; typeNumber++) {
+          var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, _errorCorrectionLevel);
+          var buffer = qrBitBuffer();
+
+          for (var i = 0; i < _dataList.length; i++) {
+            var data = _dataList[i];
+            buffer.put(data.getMode(), 4);
+            buffer.put(data.getLength(), QRUtil.getLengthInBits(data.getMode(), typeNumber) );
+            data.write(buffer);
+          }
+
+          var totalDataCount = 0;
+          for (var i = 0; i < rsBlocks.length; i++) {
+            totalDataCount += rsBlocks[i].dataCount;
+          }
+
+          if (buffer.getLengthInBits() <= totalDataCount * 8) {
+            break;
+          }
+        }
+
+        _typeNumber = typeNumber;
+      }
+
+      makeImpl(false, getBestMaskPattern() );
+    };
+
+    _this.createTableTag = function(cellSize, margin) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var qrHtml = '';
+
+      qrHtml += '<table style="';
+      qrHtml += ' border-width: 0px; border-style: none;';
+      qrHtml += ' border-collapse: collapse;';
+      qrHtml += ' padding: 0px; margin: ' + margin + 'px;';
+      qrHtml += '">';
+      qrHtml += '<tbody>';
+
+      for (var r = 0; r < _this.getModuleCount(); r += 1) {
+
+        qrHtml += '<tr>';
+
+        for (var c = 0; c < _this.getModuleCount(); c += 1) {
+          qrHtml += '<td style="';
+          qrHtml += ' border-width: 0px; border-style: none;';
+          qrHtml += ' border-collapse: collapse;';
+          qrHtml += ' padding: 0px; margin: 0px;';
+          qrHtml += ' width: ' + cellSize + 'px;';
+          qrHtml += ' height: ' + cellSize + 'px;';
+          qrHtml += ' background-color: ';
+          qrHtml += _this.isDark(r, c)? '#000000' : '#ffffff';
+          qrHtml += ';';
+          qrHtml += '"/>';
+        }
+
+        qrHtml += '</tr>';
+      }
+
+      qrHtml += '</tbody>';
+      qrHtml += '</table>';
+
+      return qrHtml;
+    };
+
+    _this.createSvgTag = function(cellSize, margin, alt, title) {
+
+      var opts = {};
+      if (typeof arguments[0] == 'object') {
+        // Called by options.
+        opts = arguments[0];
+        // overwrite cellSize and margin.
+        cellSize = opts.cellSize;
+        margin = opts.margin;
+        alt = opts.alt;
+        title = opts.title;
+      }
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      // Compose alt property surrogate
+      alt = (typeof alt === 'string') ? {text: alt} : alt || {};
+      alt.text = alt.text || null;
+      alt.id = (alt.text) ? alt.id || 'qrcode-description' : null;
+
+      // Compose title property surrogate
+      title = (typeof title === 'string') ? {text: title} : title || {};
+      title.text = title.text || null;
+      title.id = (title.text) ? title.id || 'qrcode-title' : null;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var c, mc, r, mr, qrSvg='', rect;
+
+      rect = 'l' + cellSize + ',0 0,' + cellSize +
+        ' -' + cellSize + ',0 0,-' + cellSize + 'z ';
+
+      qrSvg += '<svg version="1.1" xmlns="http://www.w3.org/2000/svg"';
+      qrSvg += !opts.scalable ? ' width="' + size + 'px" height="' + size + 'px"' : '';
+      qrSvg += ' viewBox="0 0 ' + size + ' ' + size + '" ';
+      qrSvg += ' preserveAspectRatio="xMinYMin meet"';
+      qrSvg += (title.text || alt.text) ? ' role="img" aria-labelledby="' +
+          escapeXml([title.id, alt.id].join(' ').trim() ) + '"' : '';
+      qrSvg += '>';
+      qrSvg += (title.text) ? '<title id="' + escapeXml(title.id) + '">' +
+          escapeXml(title.text) + '</title>' : '';
+      qrSvg += (alt.text) ? '<description id="' + escapeXml(alt.id) + '">' +
+          escapeXml(alt.text) + '</description>' : '';
+      qrSvg += '<rect width="100%" height="100%" fill="white" cx="0" cy="0"/>';
+      qrSvg += '<path d="';
+
+      for (r = 0; r < _this.getModuleCount(); r += 1) {
+        mr = r * cellSize + margin;
+        for (c = 0; c < _this.getModuleCount(); c += 1) {
+          if (_this.isDark(r, c) ) {
+            mc = c*cellSize+margin;
+            qrSvg += 'M' + mc + ',' + mr + rect;
+          }
+        }
+      }
+
+      qrSvg += '" stroke="transparent" fill="black"/>';
+      qrSvg += '</svg>';
+
+      return qrSvg;
+    };
+
+    _this.createDataURL = function(cellSize, margin) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      return createDataURL(size, size, function(x, y) {
+        if (min <= x && x < max && min <= y && y < max) {
+          var c = Math.floor( (x - min) / cellSize);
+          var r = Math.floor( (y - min) / cellSize);
+          return _this.isDark(r, c)? 0 : 1;
+        } else {
+          return 1;
+        }
+      } );
+    };
+
+    _this.createImgTag = function(cellSize, margin, alt) {
+
+      cellSize = cellSize || 2;
+      margin = (typeof margin == 'undefined')? cellSize * 4 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+
+      var img = '';
+      img += '<img';
+      img += '\u0020src="';
+      img += _this.createDataURL(cellSize, margin);
+      img += '"';
+      img += '\u0020width="';
+      img += size;
+      img += '"';
+      img += '\u0020height="';
+      img += size;
+      img += '"';
+      if (alt) {
+        img += '\u0020alt="';
+        img += escapeXml(alt);
+        img += '"';
+      }
+      img += '/>';
+
+      return img;
+    };
+
+    var escapeXml = function(s) {
+      var escaped = '';
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charAt(i);
+        switch(c) {
+        case '<': escaped += '&lt;'; break;
+        case '>': escaped += '&gt;'; break;
+        case '&': escaped += '&amp;'; break;
+        case '"': escaped += '&quot;'; break;
+        default : escaped += c; break;
+        }
+      }
+      return escaped;
+    };
+
+    var _createHalfASCII = function(margin) {
+      var cellSize = 1;
+      margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      var y, x, r1, r2, p;
+
+      var blocks = {
+        '██': '█',
+        '█ ': '▀',
+        ' █': '▄',
+        '  ': ' '
+      };
+
+      var blocksLastLineNoMargin = {
+        '██': '▀',
+        '█ ': '▀',
+        ' █': ' ',
+        '  ': ' '
+      };
+
+      var ascii = '';
+      for (y = 0; y < size; y += 2) {
+        r1 = Math.floor((y - min) / cellSize);
+        r2 = Math.floor((y + 1 - min) / cellSize);
+        for (x = 0; x < size; x += 1) {
+          p = '█';
+
+          if (min <= x && x < max && min <= y && y < max && _this.isDark(r1, Math.floor((x - min) / cellSize))) {
+            p = ' ';
+          }
+
+          if (min <= x && x < max && min <= y+1 && y+1 < max && _this.isDark(r2, Math.floor((x - min) / cellSize))) {
+            p += ' ';
+          }
+          else {
+            p += '█';
+          }
+
+          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+          ascii += (margin < 1 && y+1 >= max) ? blocksLastLineNoMargin[p] : blocks[p];
+        }
+
+        ascii += '\n';
+      }
+
+      if (size % 2 && margin > 0) {
+        return ascii.substring(0, ascii.length - size - 1) + Array(size+1).join('▀');
+      }
+
+      return ascii.substring(0, ascii.length-1);
+    };
+
+    _this.createASCII = function(cellSize, margin) {
+      cellSize = cellSize || 1;
+
+      if (cellSize < 2) {
+        return _createHalfASCII(margin);
+      }
+
+      cellSize -= 1;
+      margin = (typeof margin == 'undefined')? cellSize * 2 : margin;
+
+      var size = _this.getModuleCount() * cellSize + margin * 2;
+      var min = margin;
+      var max = size - margin;
+
+      var y, x, r, p;
+
+      var white = Array(cellSize+1).join('██');
+      var black = Array(cellSize+1).join('  ');
+
+      var ascii = '';
+      var line = '';
+      for (y = 0; y < size; y += 1) {
+        r = Math.floor( (y - min) / cellSize);
+        line = '';
+        for (x = 0; x < size; x += 1) {
+          p = 1;
+
+          if (min <= x && x < max && min <= y && y < max && _this.isDark(r, Math.floor((x - min) / cellSize))) {
+            p = 0;
+          }
+
+          // Output 2 characters per pixel, to create full square. 1 character per pixels gives only half width of square.
+          line += p ? white : black;
+        }
+
+        for (r = 0; r < cellSize; r += 1) {
+          ascii += line + '\n';
+        }
+      }
+
+      return ascii.substring(0, ascii.length-1);
+    };
+
+    _this.renderTo2dContext = function(context, cellSize) {
+      cellSize = cellSize || 2;
+      var length = _this.getModuleCount();
+      for (var row = 0; row < length; row++) {
+        for (var col = 0; col < length; col++) {
+          context.fillStyle = _this.isDark(row, col) ? 'black' : 'white';
+          context.fillRect(row * cellSize, col * cellSize, cellSize, cellSize);
+        }
+      }
+    }
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrcode.stringToBytes
+  //---------------------------------------------------------------------
+
+  qrcode.stringToBytesFuncs = {
+    'default' : function(s) {
+      var bytes = [];
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charCodeAt(i);
+        bytes.push(c & 0xff);
+      }
+      return bytes;
+    }
+  };
+
+  qrcode.stringToBytes = qrcode.stringToBytesFuncs['default'];
+
+  //---------------------------------------------------------------------
+  // qrcode.createStringToBytes
+  //---------------------------------------------------------------------
+
+  /**
+   * @param unicodeData base64 string of byte array.
+   * [16bit Unicode],[16bit Bytes], ...
+   * @param numChars
+   */
+  qrcode.createStringToBytes = function(unicodeData, numChars) {
+
+    // create conversion map.
+
+    var unicodeMap = function() {
+
+      var bin = base64DecodeInputStream(unicodeData);
+      var read = function() {
+        var b = bin.read();
+        if (b == -1) throw 'eof';
+        return b;
+      };
+
+      var count = 0;
+      var unicodeMap = {};
+      while (true) {
+        var b0 = bin.read();
+        if (b0 == -1) break;
+        var b1 = read();
+        var b2 = read();
+        var b3 = read();
+        var k = String.fromCharCode( (b0 << 8) | b1);
+        var v = (b2 << 8) | b3;
+        unicodeMap[k] = v;
+        count += 1;
+      }
+      if (count != numChars) {
+        throw count + ' != ' + numChars;
+      }
+
+      return unicodeMap;
+    }();
+
+    var unknownChar = '?'.charCodeAt(0);
+
+    return function(s) {
+      var bytes = [];
+      for (var i = 0; i < s.length; i += 1) {
+        var c = s.charCodeAt(i);
+        if (c < 128) {
+          bytes.push(c);
+        } else {
+          var b = unicodeMap[s.charAt(i)];
+          if (typeof b == 'number') {
+            if ( (b & 0xff) == b) {
+              // 1byte
+              bytes.push(b);
+            } else {
+              // 2bytes
+              bytes.push(b >>> 8);
+              bytes.push(b & 0xff);
+            }
+          } else {
+            bytes.push(unknownChar);
+          }
+        }
+      }
+      return bytes;
+    };
+  };
+
+  //---------------------------------------------------------------------
+  // QRMode
+  //---------------------------------------------------------------------
+
+  var QRMode = {
+    MODE_NUMBER :    1 << 0,
+    MODE_ALPHA_NUM : 1 << 1,
+    MODE_8BIT_BYTE : 1 << 2,
+    MODE_KANJI :     1 << 3
+  };
+
+  //---------------------------------------------------------------------
+  // QRErrorCorrectionLevel
+  //---------------------------------------------------------------------
+
+  var QRErrorCorrectionLevel = {
+    L : 1,
+    M : 0,
+    Q : 3,
+    H : 2
+  };
+
+  //---------------------------------------------------------------------
+  // QRMaskPattern
+  //---------------------------------------------------------------------
+
+  var QRMaskPattern = {
+    PATTERN000 : 0,
+    PATTERN001 : 1,
+    PATTERN010 : 2,
+    PATTERN011 : 3,
+    PATTERN100 : 4,
+    PATTERN101 : 5,
+    PATTERN110 : 6,
+    PATTERN111 : 7
+  };
+
+  //---------------------------------------------------------------------
+  // QRUtil
+  //---------------------------------------------------------------------
+
+  var QRUtil = function() {
+
+    var PATTERN_POSITION_TABLE = [
+      [],
+      [6, 18],
+      [6, 22],
+      [6, 26],
+      [6, 30],
+      [6, 34],
+      [6, 22, 38],
+      [6, 24, 42],
+      [6, 26, 46],
+      [6, 28, 50],
+      [6, 30, 54],
+      [6, 32, 58],
+      [6, 34, 62],
+      [6, 26, 46, 66],
+      [6, 26, 48, 70],
+      [6, 26, 50, 74],
+      [6, 30, 54, 78],
+      [6, 30, 56, 82],
+      [6, 30, 58, 86],
+      [6, 34, 62, 90],
+      [6, 28, 50, 72, 94],
+      [6, 26, 50, 74, 98],
+      [6, 30, 54, 78, 102],
+      [6, 28, 54, 80, 106],
+      [6, 32, 58, 84, 110],
+      [6, 30, 58, 86, 114],
+      [6, 34, 62, 90, 118],
+      [6, 26, 50, 74, 98, 122],
+      [6, 30, 54, 78, 102, 126],
+      [6, 26, 52, 78, 104, 130],
+      [6, 30, 56, 82, 108, 134],
+      [6, 34, 60, 86, 112, 138],
+      [6, 30, 58, 86, 114, 142],
+      [6, 34, 62, 90, 118, 146],
+      [6, 30, 54, 78, 102, 126, 150],
+      [6, 24, 50, 76, 102, 128, 154],
+      [6, 28, 54, 80, 106, 132, 158],
+      [6, 32, 58, 84, 110, 136, 162],
+      [6, 26, 54, 82, 110, 138, 166],
+      [6, 30, 58, 86, 114, 142, 170]
+    ];
+    var G15 = (1 << 10) | (1 << 8) | (1 << 5) | (1 << 4) | (1 << 2) | (1 << 1) | (1 << 0);
+    var G18 = (1 << 12) | (1 << 11) | (1 << 10) | (1 << 9) | (1 << 8) | (1 << 5) | (1 << 2) | (1 << 0);
+    var G15_MASK = (1 << 14) | (1 << 12) | (1 << 10) | (1 << 4) | (1 << 1);
+
+    var _this = {};
+
+    var getBCHDigit = function(data) {
+      var digit = 0;
+      while (data != 0) {
+        digit += 1;
+        data >>>= 1;
+      }
+      return digit;
+    };
+
+    _this.getBCHTypeInfo = function(data) {
+      var d = data << 10;
+      while (getBCHDigit(d) - getBCHDigit(G15) >= 0) {
+        d ^= (G15 << (getBCHDigit(d) - getBCHDigit(G15) ) );
+      }
+      return ( (data << 10) | d) ^ G15_MASK;
+    };
+
+    _this.getBCHTypeNumber = function(data) {
+      var d = data << 12;
+      while (getBCHDigit(d) - getBCHDigit(G18) >= 0) {
+        d ^= (G18 << (getBCHDigit(d) - getBCHDigit(G18) ) );
+      }
+      return (data << 12) | d;
+    };
+
+    _this.getPatternPosition = function(typeNumber) {
+      return PATTERN_POSITION_TABLE[typeNumber - 1];
+    };
+
+    _this.getMaskFunction = function(maskPattern) {
+
+      switch (maskPattern) {
+
+      case QRMaskPattern.PATTERN000 :
+        return function(i, j) { return (i + j) % 2 == 0; };
+      case QRMaskPattern.PATTERN001 :
+        return function(i, j) { return i % 2 == 0; };
+      case QRMaskPattern.PATTERN010 :
+        return function(i, j) { return j % 3 == 0; };
+      case QRMaskPattern.PATTERN011 :
+        return function(i, j) { return (i + j) % 3 == 0; };
+      case QRMaskPattern.PATTERN100 :
+        return function(i, j) { return (Math.floor(i / 2) + Math.floor(j / 3) ) % 2 == 0; };
+      case QRMaskPattern.PATTERN101 :
+        return function(i, j) { return (i * j) % 2 + (i * j) % 3 == 0; };
+      case QRMaskPattern.PATTERN110 :
+        return function(i, j) { return ( (i * j) % 2 + (i * j) % 3) % 2 == 0; };
+      case QRMaskPattern.PATTERN111 :
+        return function(i, j) { return ( (i * j) % 3 + (i + j) % 2) % 2 == 0; };
+
+      default :
+        throw 'bad maskPattern:' + maskPattern;
+      }
+    };
+
+    _this.getErrorCorrectPolynomial = function(errorCorrectLength) {
+      var a = qrPolynomial([1], 0);
+      for (var i = 0; i < errorCorrectLength; i += 1) {
+        a = a.multiply(qrPolynomial([1, QRMath.gexp(i)], 0) );
+      }
+      return a;
+    };
+
+    _this.getLengthInBits = function(mode, type) {
+
+      if (1 <= type && type < 10) {
+
+        // 1 - 9
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 10;
+        case QRMode.MODE_ALPHA_NUM : return 9;
+        case QRMode.MODE_8BIT_BYTE : return 8;
+        case QRMode.MODE_KANJI     : return 8;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else if (type < 27) {
+
+        // 10 - 26
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 12;
+        case QRMode.MODE_ALPHA_NUM : return 11;
+        case QRMode.MODE_8BIT_BYTE : return 16;
+        case QRMode.MODE_KANJI     : return 10;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else if (type < 41) {
+
+        // 27 - 40
+
+        switch(mode) {
+        case QRMode.MODE_NUMBER    : return 14;
+        case QRMode.MODE_ALPHA_NUM : return 13;
+        case QRMode.MODE_8BIT_BYTE : return 16;
+        case QRMode.MODE_KANJI     : return 12;
+        default :
+          throw 'mode:' + mode;
+        }
+
+      } else {
+        throw 'type:' + type;
+      }
+    };
+
+    _this.getLostPoint = function(qrcode) {
+
+      var moduleCount = qrcode.getModuleCount();
+
+      var lostPoint = 0;
+
+      // LEVEL1
+
+      for (var row = 0; row < moduleCount; row += 1) {
+        for (var col = 0; col < moduleCount; col += 1) {
+
+          var sameCount = 0;
+          var dark = qrcode.isDark(row, col);
+
+          for (var r = -1; r <= 1; r += 1) {
+
+            if (row + r < 0 || moduleCount <= row + r) {
+              continue;
+            }
+
+            for (var c = -1; c <= 1; c += 1) {
+
+              if (col + c < 0 || moduleCount <= col + c) {
+                continue;
+              }
+
+              if (r == 0 && c == 0) {
+                continue;
+              }
+
+              if (dark == qrcode.isDark(row + r, col + c) ) {
+                sameCount += 1;
+              }
+            }
+          }
+
+          if (sameCount > 5) {
+            lostPoint += (3 + sameCount - 5);
+          }
+        }
+      };
+
+      // LEVEL2
+
+      for (var row = 0; row < moduleCount - 1; row += 1) {
+        for (var col = 0; col < moduleCount - 1; col += 1) {
+          var count = 0;
+          if (qrcode.isDark(row, col) ) count += 1;
+          if (qrcode.isDark(row + 1, col) ) count += 1;
+          if (qrcode.isDark(row, col + 1) ) count += 1;
+          if (qrcode.isDark(row + 1, col + 1) ) count += 1;
+          if (count == 0 || count == 4) {
+            lostPoint += 3;
+          }
+        }
+      }
+
+      // LEVEL3
+
+      for (var row = 0; row < moduleCount; row += 1) {
+        for (var col = 0; col < moduleCount - 6; col += 1) {
+          if (qrcode.isDark(row, col)
+              && !qrcode.isDark(row, col + 1)
+              &&  qrcode.isDark(row, col + 2)
+              &&  qrcode.isDark(row, col + 3)
+              &&  qrcode.isDark(row, col + 4)
+              && !qrcode.isDark(row, col + 5)
+              &&  qrcode.isDark(row, col + 6) ) {
+            lostPoint += 40;
+          }
+        }
+      }
+
+      for (var col = 0; col < moduleCount; col += 1) {
+        for (var row = 0; row < moduleCount - 6; row += 1) {
+          if (qrcode.isDark(row, col)
+              && !qrcode.isDark(row + 1, col)
+              &&  qrcode.isDark(row + 2, col)
+              &&  qrcode.isDark(row + 3, col)
+              &&  qrcode.isDark(row + 4, col)
+              && !qrcode.isDark(row + 5, col)
+              &&  qrcode.isDark(row + 6, col) ) {
+            lostPoint += 40;
+          }
+        }
+      }
+
+      // LEVEL4
+
+      var darkCount = 0;
+
+      for (var col = 0; col < moduleCount; col += 1) {
+        for (var row = 0; row < moduleCount; row += 1) {
+          if (qrcode.isDark(row, col) ) {
+            darkCount += 1;
+          }
+        }
+      }
+
+      var ratio = Math.abs(100 * darkCount / moduleCount / moduleCount - 50) / 5;
+      lostPoint += ratio * 10;
+
+      return lostPoint;
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // QRMath
+  //---------------------------------------------------------------------
+
+  var QRMath = function() {
+
+    var EXP_TABLE = new Array(256);
+    var LOG_TABLE = new Array(256);
+
+    // initialize tables
+    for (var i = 0; i < 8; i += 1) {
+      EXP_TABLE[i] = 1 << i;
+    }
+    for (var i = 8; i < 256; i += 1) {
+      EXP_TABLE[i] = EXP_TABLE[i - 4]
+        ^ EXP_TABLE[i - 5]
+        ^ EXP_TABLE[i - 6]
+        ^ EXP_TABLE[i - 8];
+    }
+    for (var i = 0; i < 255; i += 1) {
+      LOG_TABLE[EXP_TABLE[i] ] = i;
+    }
+
+    var _this = {};
+
+    _this.glog = function(n) {
+
+      if (n < 1) {
+        throw 'glog(' + n + ')';
+      }
+
+      return LOG_TABLE[n];
+    };
+
+    _this.gexp = function(n) {
+
+      while (n < 0) {
+        n += 255;
+      }
+
+      while (n >= 256) {
+        n -= 255;
+      }
+
+      return EXP_TABLE[n];
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // qrPolynomial
+  //---------------------------------------------------------------------
+
+  function qrPolynomial(num, shift) {
+
+    if (typeof num.length == 'undefined') {
+      throw num.length + '/' + shift;
+    }
+
+    var _num = function() {
+      var offset = 0;
+      while (offset < num.length && num[offset] == 0) {
+        offset += 1;
+      }
+      var _num = new Array(num.length - offset + shift);
+      for (var i = 0; i < num.length - offset; i += 1) {
+        _num[i] = num[i + offset];
+      }
+      return _num;
+    }();
+
+    var _this = {};
+
+    _this.getAt = function(index) {
+      return _num[index];
+    };
+
+    _this.getLength = function() {
+      return _num.length;
+    };
+
+    _this.multiply = function(e) {
+
+      var num = new Array(_this.getLength() + e.getLength() - 1);
+
+      for (var i = 0; i < _this.getLength(); i += 1) {
+        for (var j = 0; j < e.getLength(); j += 1) {
+          num[i + j] ^= QRMath.gexp(QRMath.glog(_this.getAt(i) ) + QRMath.glog(e.getAt(j) ) );
+        }
+      }
+
+      return qrPolynomial(num, 0);
+    };
+
+    _this.mod = function(e) {
+
+      if (_this.getLength() - e.getLength() < 0) {
+        return _this;
+      }
+
+      var ratio = QRMath.glog(_this.getAt(0) ) - QRMath.glog(e.getAt(0) );
+
+      var num = new Array(_this.getLength() );
+      for (var i = 0; i < _this.getLength(); i += 1) {
+        num[i] = _this.getAt(i);
+      }
+
+      for (var i = 0; i < e.getLength(); i += 1) {
+        num[i] ^= QRMath.gexp(QRMath.glog(e.getAt(i) ) + ratio);
+      }
+
+      // recursive call
+      return qrPolynomial(num, 0).mod(e);
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // QRRSBlock
+  //---------------------------------------------------------------------
+
+  var QRRSBlock = function() {
+
+    var RS_BLOCK_TABLE = [
+
+      // L
+      // M
+      // Q
+      // H
+
+      // 1
+      [1, 26, 19],
+      [1, 26, 16],
+      [1, 26, 13],
+      [1, 26, 9],
+
+      // 2
+      [1, 44, 34],
+      [1, 44, 28],
+      [1, 44, 22],
+      [1, 44, 16],
+
+      // 3
+      [1, 70, 55],
+      [1, 70, 44],
+      [2, 35, 17],
+      [2, 35, 13],
+
+      // 4
+      [1, 100, 80],
+      [2, 50, 32],
+      [2, 50, 24],
+      [4, 25, 9],
+
+      // 5
+      [1, 134, 108],
+      [2, 67, 43],
+      [2, 33, 15, 2, 34, 16],
+      [2, 33, 11, 2, 34, 12],
+
+      // 6
+      [2, 86, 68],
+      [4, 43, 27],
+      [4, 43, 19],
+      [4, 43, 15],
+
+      // 7
+      [2, 98, 78],
+      [4, 49, 31],
+      [2, 32, 14, 4, 33, 15],
+      [4, 39, 13, 1, 40, 14],
+
+      // 8
+      [2, 121, 97],
+      [2, 60, 38, 2, 61, 39],
+      [4, 40, 18, 2, 41, 19],
+      [4, 40, 14, 2, 41, 15],
+
+      // 9
+      [2, 146, 116],
+      [3, 58, 36, 2, 59, 37],
+      [4, 36, 16, 4, 37, 17],
+      [4, 36, 12, 4, 37, 13],
+
+      // 10
+      [2, 86, 68, 2, 87, 69],
+      [4, 69, 43, 1, 70, 44],
+      [6, 43, 19, 2, 44, 20],
+      [6, 43, 15, 2, 44, 16],
+
+      // 11
+      [4, 101, 81],
+      [1, 80, 50, 4, 81, 51],
+      [4, 50, 22, 4, 51, 23],
+      [3, 36, 12, 8, 37, 13],
+
+      // 12
+      [2, 116, 92, 2, 117, 93],
+      [6, 58, 36, 2, 59, 37],
+      [4, 46, 20, 6, 47, 21],
+      [7, 42, 14, 4, 43, 15],
+
+      // 13
+      [4, 133, 107],
+      [8, 59, 37, 1, 60, 38],
+      [8, 44, 20, 4, 45, 21],
+      [12, 33, 11, 4, 34, 12],
+
+      // 14
+      [3, 145, 115, 1, 146, 116],
+      [4, 64, 40, 5, 65, 41],
+      [11, 36, 16, 5, 37, 17],
+      [11, 36, 12, 5, 37, 13],
+
+      // 15
+      [5, 109, 87, 1, 110, 88],
+      [5, 65, 41, 5, 66, 42],
+      [5, 54, 24, 7, 55, 25],
+      [11, 36, 12, 7, 37, 13],
+
+      // 16
+      [5, 122, 98, 1, 123, 99],
+      [7, 73, 45, 3, 74, 46],
+      [15, 43, 19, 2, 44, 20],
+      [3, 45, 15, 13, 46, 16],
+
+      // 17
+      [1, 135, 107, 5, 136, 108],
+      [10, 74, 46, 1, 75, 47],
+      [1, 50, 22, 15, 51, 23],
+      [2, 42, 14, 17, 43, 15],
+
+      // 18
+      [5, 150, 120, 1, 151, 121],
+      [9, 69, 43, 4, 70, 44],
+      [17, 50, 22, 1, 51, 23],
+      [2, 42, 14, 19, 43, 15],
+
+      // 19
+      [3, 141, 113, 4, 142, 114],
+      [3, 70, 44, 11, 71, 45],
+      [17, 47, 21, 4, 48, 22],
+      [9, 39, 13, 16, 40, 14],
+
+      // 20
+      [3, 135, 107, 5, 136, 108],
+      [3, 67, 41, 13, 68, 42],
+      [15, 54, 24, 5, 55, 25],
+      [15, 43, 15, 10, 44, 16],
+
+      // 21
+      [4, 144, 116, 4, 145, 117],
+      [17, 68, 42],
+      [17, 50, 22, 6, 51, 23],
+      [19, 46, 16, 6, 47, 17],
+
+      // 22
+      [2, 139, 111, 7, 140, 112],
+      [17, 74, 46],
+      [7, 54, 24, 16, 55, 25],
+      [34, 37, 13],
+
+      // 23
+      [4, 151, 121, 5, 152, 122],
+      [4, 75, 47, 14, 76, 48],
+      [11, 54, 24, 14, 55, 25],
+      [16, 45, 15, 14, 46, 16],
+
+      // 24
+      [6, 147, 117, 4, 148, 118],
+      [6, 73, 45, 14, 74, 46],
+      [11, 54, 24, 16, 55, 25],
+      [30, 46, 16, 2, 47, 17],
+
+      // 25
+      [8, 132, 106, 4, 133, 107],
+      [8, 75, 47, 13, 76, 48],
+      [7, 54, 24, 22, 55, 25],
+      [22, 45, 15, 13, 46, 16],
+
+      // 26
+      [10, 142, 114, 2, 143, 115],
+      [19, 74, 46, 4, 75, 47],
+      [28, 50, 22, 6, 51, 23],
+      [33, 46, 16, 4, 47, 17],
+
+      // 27
+      [8, 152, 122, 4, 153, 123],
+      [22, 73, 45, 3, 74, 46],
+      [8, 53, 23, 26, 54, 24],
+      [12, 45, 15, 28, 46, 16],
+
+      // 28
+      [3, 147, 117, 10, 148, 118],
+      [3, 73, 45, 23, 74, 46],
+      [4, 54, 24, 31, 55, 25],
+      [11, 45, 15, 31, 46, 16],
+
+      // 29
+      [7, 146, 116, 7, 147, 117],
+      [21, 73, 45, 7, 74, 46],
+      [1, 53, 23, 37, 54, 24],
+      [19, 45, 15, 26, 46, 16],
+
+      // 30
+      [5, 145, 115, 10, 146, 116],
+      [19, 75, 47, 10, 76, 48],
+      [15, 54, 24, 25, 55, 25],
+      [23, 45, 15, 25, 46, 16],
+
+      // 31
+      [13, 145, 115, 3, 146, 116],
+      [2, 74, 46, 29, 75, 47],
+      [42, 54, 24, 1, 55, 25],
+      [23, 45, 15, 28, 46, 16],
+
+      // 32
+      [17, 145, 115],
+      [10, 74, 46, 23, 75, 47],
+      [10, 54, 24, 35, 55, 25],
+      [19, 45, 15, 35, 46, 16],
+
+      // 33
+      [17, 145, 115, 1, 146, 116],
+      [14, 74, 46, 21, 75, 47],
+      [29, 54, 24, 19, 55, 25],
+      [11, 45, 15, 46, 46, 16],
+
+      // 34
+      [13, 145, 115, 6, 146, 116],
+      [14, 74, 46, 23, 75, 47],
+      [44, 54, 24, 7, 55, 25],
+      [59, 46, 16, 1, 47, 17],
+
+      // 35
+      [12, 151, 121, 7, 152, 122],
+      [12, 75, 47, 26, 76, 48],
+      [39, 54, 24, 14, 55, 25],
+      [22, 45, 15, 41, 46, 16],
+
+      // 36
+      [6, 151, 121, 14, 152, 122],
+      [6, 75, 47, 34, 76, 48],
+      [46, 54, 24, 10, 55, 25],
+      [2, 45, 15, 64, 46, 16],
+
+      // 37
+      [17, 152, 122, 4, 153, 123],
+      [29, 74, 46, 14, 75, 47],
+      [49, 54, 24, 10, 55, 25],
+      [24, 45, 15, 46, 46, 16],
+
+      // 38
+      [4, 152, 122, 18, 153, 123],
+      [13, 74, 46, 32, 75, 47],
+      [48, 54, 24, 14, 55, 25],
+      [42, 45, 15, 32, 46, 16],
+
+      // 39
+      [20, 147, 117, 4, 148, 118],
+      [40, 75, 47, 7, 76, 48],
+      [43, 54, 24, 22, 55, 25],
+      [10, 45, 15, 67, 46, 16],
+
+      // 40
+      [19, 148, 118, 6, 149, 119],
+      [18, 75, 47, 31, 76, 48],
+      [34, 54, 24, 34, 55, 25],
+      [20, 45, 15, 61, 46, 16]
+    ];
+
+    var qrRSBlock = function(totalCount, dataCount) {
+      var _this = {};
+      _this.totalCount = totalCount;
+      _this.dataCount = dataCount;
+      return _this;
+    };
+
+    var _this = {};
+
+    var getRsBlockTable = function(typeNumber, errorCorrectionLevel) {
+
+      switch(errorCorrectionLevel) {
+      case QRErrorCorrectionLevel.L :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 0];
+      case QRErrorCorrectionLevel.M :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 1];
+      case QRErrorCorrectionLevel.Q :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 2];
+      case QRErrorCorrectionLevel.H :
+        return RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 3];
+      default :
+        return undefined;
+      }
+    };
+
+    _this.getRSBlocks = function(typeNumber, errorCorrectionLevel) {
+
+      var rsBlock = getRsBlockTable(typeNumber, errorCorrectionLevel);
+
+      if (typeof rsBlock == 'undefined') {
+        throw 'bad rs block @ typeNumber:' + typeNumber +
+            '/errorCorrectionLevel:' + errorCorrectionLevel;
+      }
+
+      var length = rsBlock.length / 3;
+
+      var list = [];
+
+      for (var i = 0; i < length; i += 1) {
+
+        var count = rsBlock[i * 3 + 0];
+        var totalCount = rsBlock[i * 3 + 1];
+        var dataCount = rsBlock[i * 3 + 2];
+
+        for (var j = 0; j < count; j += 1) {
+          list.push(qrRSBlock(totalCount, dataCount) );
+        }
+      }
+
+      return list;
+    };
+
+    return _this;
+  }();
+
+  //---------------------------------------------------------------------
+  // qrBitBuffer
+  //---------------------------------------------------------------------
+
+  var qrBitBuffer = function() {
+
+    var _buffer = [];
+    var _length = 0;
+
+    var _this = {};
+
+    _this.getBuffer = function() {
+      return _buffer;
+    };
+
+    _this.getAt = function(index) {
+      var bufIndex = Math.floor(index / 8);
+      return ( (_buffer[bufIndex] >>> (7 - index % 8) ) & 1) == 1;
+    };
+
+    _this.put = function(num, length) {
+      for (var i = 0; i < length; i += 1) {
+        _this.putBit( ( (num >>> (length - i - 1) ) & 1) == 1);
+      }
+    };
+
+    _this.getLengthInBits = function() {
+      return _length;
+    };
+
+    _this.putBit = function(bit) {
+
+      var bufIndex = Math.floor(_length / 8);
+      if (_buffer.length <= bufIndex) {
+        _buffer.push(0);
+      }
+
+      if (bit) {
+        _buffer[bufIndex] |= (0x80 >>> (_length % 8) );
+      }
+
+      _length += 1;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrNumber
+  //---------------------------------------------------------------------
+
+  var qrNumber = function(data) {
+
+    var _mode = QRMode.MODE_NUMBER;
+    var _data = data;
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _data.length;
+    };
+
+    _this.write = function(buffer) {
+
+      var data = _data;
+
+      var i = 0;
+
+      while (i + 2 < data.length) {
+        buffer.put(strToNum(data.substring(i, i + 3) ), 10);
+        i += 3;
+      }
+
+      if (i < data.length) {
+        if (data.length - i == 1) {
+          buffer.put(strToNum(data.substring(i, i + 1) ), 4);
+        } else if (data.length - i == 2) {
+          buffer.put(strToNum(data.substring(i, i + 2) ), 7);
+        }
+      }
+    };
+
+    var strToNum = function(s) {
+      var num = 0;
+      for (var i = 0; i < s.length; i += 1) {
+        num = num * 10 + chatToNum(s.charAt(i) );
+      }
+      return num;
+    };
+
+    var chatToNum = function(c) {
+      if ('0' <= c && c <= '9') {
+        return c.charCodeAt(0) - '0'.charCodeAt(0);
+      }
+      throw 'illegal char :' + c;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrAlphaNum
+  //---------------------------------------------------------------------
+
+  var qrAlphaNum = function(data) {
+
+    var _mode = QRMode.MODE_ALPHA_NUM;
+    var _data = data;
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _data.length;
+    };
+
+    _this.write = function(buffer) {
+
+      var s = _data;
+
+      var i = 0;
+
+      while (i + 1 < s.length) {
+        buffer.put(
+          getCode(s.charAt(i) ) * 45 +
+          getCode(s.charAt(i + 1) ), 11);
+        i += 2;
+      }
+
+      if (i < s.length) {
+        buffer.put(getCode(s.charAt(i) ), 6);
+      }
+    };
+
+    var getCode = function(c) {
+
+      if ('0' <= c && c <= '9') {
+        return c.charCodeAt(0) - '0'.charCodeAt(0);
+      } else if ('A' <= c && c <= 'Z') {
+        return c.charCodeAt(0) - 'A'.charCodeAt(0) + 10;
+      } else {
+        switch (c) {
+        case ' ' : return 36;
+        case '$' : return 37;
+        case '%' : return 38;
+        case '*' : return 39;
+        case '+' : return 40;
+        case '-' : return 41;
+        case '.' : return 42;
+        case '/' : return 43;
+        case ':' : return 44;
+        default :
+          throw 'illegal char :' + c;
+        }
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qr8BitByte
+  //---------------------------------------------------------------------
+
+  var qr8BitByte = function(data) {
+
+    var _mode = QRMode.MODE_8BIT_BYTE;
+    var _data = data;
+    var _bytes = qrcode.stringToBytes(data);
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return _bytes.length;
+    };
+
+    _this.write = function(buffer) {
+      for (var i = 0; i < _bytes.length; i += 1) {
+        buffer.put(_bytes[i], 8);
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // qrKanji
+  //---------------------------------------------------------------------
+
+  var qrKanji = function(data) {
+
+    var _mode = QRMode.MODE_KANJI;
+    var _data = data;
+
+    var stringToBytes = qrcode.stringToBytesFuncs['SJIS'];
+    if (!stringToBytes) {
+      throw 'sjis not supported.';
+    }
+    !function(c, code) {
+      // self test for sjis support.
+      var test = stringToBytes(c);
+      if (test.length != 2 || ( (test[0] << 8) | test[1]) != code) {
+        throw 'sjis not supported.';
+      }
+    }('\u53cb', 0x9746);
+
+    var _bytes = stringToBytes(data);
+
+    var _this = {};
+
+    _this.getMode = function() {
+      return _mode;
+    };
+
+    _this.getLength = function(buffer) {
+      return ~~(_bytes.length / 2);
+    };
+
+    _this.write = function(buffer) {
+
+      var data = _bytes;
+
+      var i = 0;
+
+      while (i + 1 < data.length) {
+
+        var c = ( (0xff & data[i]) << 8) | (0xff & data[i + 1]);
+
+        if (0x8140 <= c && c <= 0x9FFC) {
+          c -= 0x8140;
+        } else if (0xE040 <= c && c <= 0xEBBF) {
+          c -= 0xC140;
+        } else {
+          throw 'illegal char at ' + (i + 1) + '/' + c;
+        }
+
+        c = ( (c >>> 8) & 0xff) * 0xC0 + (c & 0xff);
+
+        buffer.put(c, 13);
+
+        i += 2;
+      }
+
+      if (i < data.length) {
+        throw 'illegal char at ' + (i + 1);
+      }
+    };
+
+    return _this;
+  };
+
+  //=====================================================================
+  // GIF Support etc.
+  //
+
+  //---------------------------------------------------------------------
+  // byteArrayOutputStream
+  //---------------------------------------------------------------------
+
+  var byteArrayOutputStream = function() {
+
+    var _bytes = [];
+
+    var _this = {};
+
+    _this.writeByte = function(b) {
+      _bytes.push(b & 0xff);
+    };
+
+    _this.writeShort = function(i) {
+      _this.writeByte(i);
+      _this.writeByte(i >>> 8);
+    };
+
+    _this.writeBytes = function(b, off, len) {
+      off = off || 0;
+      len = len || b.length;
+      for (var i = 0; i < len; i += 1) {
+        _this.writeByte(b[i + off]);
+      }
+    };
+
+    _this.writeString = function(s) {
+      for (var i = 0; i < s.length; i += 1) {
+        _this.writeByte(s.charCodeAt(i) );
+      }
+    };
+
+    _this.toByteArray = function() {
+      return _bytes;
+    };
+
+    _this.toString = function() {
+      var s = '';
+      s += '[';
+      for (var i = 0; i < _bytes.length; i += 1) {
+        if (i > 0) {
+          s += ',';
+        }
+        s += _bytes[i];
+      }
+      s += ']';
+      return s;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // base64EncodeOutputStream
+  //---------------------------------------------------------------------
+
+  var base64EncodeOutputStream = function() {
+
+    var _buffer = 0;
+    var _buflen = 0;
+    var _length = 0;
+    var _base64 = '';
+
+    var _this = {};
+
+    var writeEncoded = function(b) {
+      _base64 += String.fromCharCode(encode(b & 0x3f) );
+    };
+
+    var encode = function(n) {
+      if (n < 0) {
+        // error.
+      } else if (n < 26) {
+        return 0x41 + n;
+      } else if (n < 52) {
+        return 0x61 + (n - 26);
+      } else if (n < 62) {
+        return 0x30 + (n - 52);
+      } else if (n == 62) {
+        return 0x2b;
+      } else if (n == 63) {
+        return 0x2f;
+      }
+      throw 'n:' + n;
+    };
+
+    _this.writeByte = function(n) {
+
+      _buffer = (_buffer << 8) | (n & 0xff);
+      _buflen += 8;
+      _length += 1;
+
+      while (_buflen >= 6) {
+        writeEncoded(_buffer >>> (_buflen - 6) );
+        _buflen -= 6;
+      }
+    };
+
+    _this.flush = function() {
+
+      if (_buflen > 0) {
+        writeEncoded(_buffer << (6 - _buflen) );
+        _buffer = 0;
+        _buflen = 0;
+      }
+
+      if (_length % 3 != 0) {
+        // padding
+        var padlen = 3 - _length % 3;
+        for (var i = 0; i < padlen; i += 1) {
+          _base64 += '=';
+        }
+      }
+    };
+
+    _this.toString = function() {
+      return _base64;
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // base64DecodeInputStream
+  //---------------------------------------------------------------------
+
+  var base64DecodeInputStream = function(str) {
+
+    var _str = str;
+    var _pos = 0;
+    var _buffer = 0;
+    var _buflen = 0;
+
+    var _this = {};
+
+    _this.read = function() {
+
+      while (_buflen < 8) {
+
+        if (_pos >= _str.length) {
+          if (_buflen == 0) {
+            return -1;
+          }
+          throw 'unexpected end of file./' + _buflen;
+        }
+
+        var c = _str.charAt(_pos);
+        _pos += 1;
+
+        if (c == '=') {
+          _buflen = 0;
+          return -1;
+        } else if (c.match(/^\s$/) ) {
+          // ignore if whitespace.
+          continue;
+        }
+
+        _buffer = (_buffer << 6) | decode(c.charCodeAt(0) );
+        _buflen += 6;
+      }
+
+      var n = (_buffer >>> (_buflen - 8) ) & 0xff;
+      _buflen -= 8;
+      return n;
+    };
+
+    var decode = function(c) {
+      if (0x41 <= c && c <= 0x5a) {
+        return c - 0x41;
+      } else if (0x61 <= c && c <= 0x7a) {
+        return c - 0x61 + 26;
+      } else if (0x30 <= c && c <= 0x39) {
+        return c - 0x30 + 52;
+      } else if (c == 0x2b) {
+        return 62;
+      } else if (c == 0x2f) {
+        return 63;
+      } else {
+        throw 'c:' + c;
+      }
+    };
+
+    return _this;
+  };
+
+  //---------------------------------------------------------------------
+  // gifImage (B/W)
+  //---------------------------------------------------------------------
+
+  var gifImage = function(width, height) {
+
+    var _width = width;
+    var _height = height;
+    var _data = new Array(width * height);
+
+    var _this = {};
+
+    _this.setPixel = function(x, y, pixel) {
+      _data[y * _width + x] = pixel;
+    };
+
+    _this.write = function(out) {
+
+      //---------------------------------
+      // GIF Signature
+
+      out.writeString('GIF87a');
+
+      //---------------------------------
+      // Screen Descriptor
+
+      out.writeShort(_width);
+      out.writeShort(_height);
+
+      out.writeByte(0x80); // 2bit
+      out.writeByte(0);
+      out.writeByte(0);
+
+      //---------------------------------
+      // Global Color Map
+
+      // black
+      out.writeByte(0x00);
+      out.writeByte(0x00);
+      out.writeByte(0x00);
+
+      // white
+      out.writeByte(0xff);
+      out.writeByte(0xff);
+      out.writeByte(0xff);
+
+      //---------------------------------
+      // Image Descriptor
+
+      out.writeString(',');
+      out.writeShort(0);
+      out.writeShort(0);
+      out.writeShort(_width);
+      out.writeShort(_height);
+      out.writeByte(0);
+
+      //---------------------------------
+      // Local Color Map
+
+      //---------------------------------
+      // Raster Data
+
+      var lzwMinCodeSize = 2;
+      var raster = getLZWRaster(lzwMinCodeSize);
+
+      out.writeByte(lzwMinCodeSize);
+
+      var offset = 0;
+
+      while (raster.length - offset > 255) {
+        out.writeByte(255);
+        out.writeBytes(raster, offset, 255);
+        offset += 255;
+      }
+
+      out.writeByte(raster.length - offset);
+      out.writeBytes(raster, offset, raster.length - offset);
+      out.writeByte(0x00);
+
+      //---------------------------------
+      // GIF Terminator
+      out.writeString(';');
+    };
+
+    var bitOutputStream = function(out) {
+
+      var _out = out;
+      var _bitLength = 0;
+      var _bitBuffer = 0;
+
+      var _this = {};
+
+      _this.write = function(data, length) {
+
+        if ( (data >>> length) != 0) {
+          throw 'length over';
+        }
+
+        while (_bitLength + length >= 8) {
+          _out.writeByte(0xff & ( (data << _bitLength) | _bitBuffer) );
+          length -= (8 - _bitLength);
+          data >>>= (8 - _bitLength);
+          _bitBuffer = 0;
+          _bitLength = 0;
+        }
+
+        _bitBuffer = (data << _bitLength) | _bitBuffer;
+        _bitLength = _bitLength + length;
+      };
+
+      _this.flush = function() {
+        if (_bitLength > 0) {
+          _out.writeByte(_bitBuffer);
+        }
+      };
+
+      return _this;
+    };
+
+    var getLZWRaster = function(lzwMinCodeSize) {
+
+      var clearCode = 1 << lzwMinCodeSize;
+      var endCode = (1 << lzwMinCodeSize) + 1;
+      var bitLength = lzwMinCodeSize + 1;
+
+      // Setup LZWTable
+      var table = lzwTable();
+
+      for (var i = 0; i < clearCode; i += 1) {
+        table.add(String.fromCharCode(i) );
+      }
+      table.add(String.fromCharCode(clearCode) );
+      table.add(String.fromCharCode(endCode) );
+
+      var byteOut = byteArrayOutputStream();
+      var bitOut = bitOutputStream(byteOut);
+
+      // clear code
+      bitOut.write(clearCode, bitLength);
+
+      var dataIndex = 0;
+
+      var s = String.fromCharCode(_data[dataIndex]);
+      dataIndex += 1;
+
+      while (dataIndex < _data.length) {
+
+        var c = String.fromCharCode(_data[dataIndex]);
+        dataIndex += 1;
+
+        if (table.contains(s + c) ) {
+
+          s = s + c;
+
+        } else {
+
+          bitOut.write(table.indexOf(s), bitLength);
+
+          if (table.size() < 0xfff) {
+
+            if (table.size() == (1 << bitLength) ) {
+              bitLength += 1;
+            }
+
+            table.add(s + c);
+          }
+
+          s = c;
+        }
+      }
+
+      bitOut.write(table.indexOf(s), bitLength);
+
+      // end code
+      bitOut.write(endCode, bitLength);
+
+      bitOut.flush();
+
+      return byteOut.toByteArray();
+    };
+
+    var lzwTable = function() {
+
+      var _map = {};
+      var _size = 0;
+
+      var _this = {};
+
+      _this.add = function(key) {
+        if (_this.contains(key) ) {
+          throw 'dup key:' + key;
+        }
+        _map[key] = _size;
+        _size += 1;
+      };
+
+      _this.size = function() {
+        return _size;
+      };
+
+      _this.indexOf = function(key) {
+        return _map[key];
+      };
+
+      _this.contains = function(key) {
+        return typeof _map[key] != 'undefined';
+      };
+
+      return _this;
+    };
+
+    return _this;
+  };
+
+  var createDataURL = function(width, height, getPixel) {
+    var gif = gifImage(width, height);
+    for (var y = 0; y < height; y += 1) {
+      for (var x = 0; x < width; x += 1) {
+        gif.setPixel(x, y, getPixel(x, y) );
+      }
+    }
+
+    var b = byteArrayOutputStream();
+    gif.write(b);
+
+    var base64 = base64EncodeOutputStream();
+    var bytes = b.toByteArray();
+    for (var i = 0; i < bytes.length; i += 1) {
+      base64.writeByte(bytes[i]);
+    }
+    base64.flush();
+
+    return 'data:image/gif;base64,' + base64;
+  };
+
+  //---------------------------------------------------------------------
+  // returns qrcode function.
+
+  return qrcode;
+}();
+
+// multibyte support
+!function() {
+
+  qrcode.stringToBytesFuncs['UTF-8'] = function(s) {
+    // http://stackoverflow.com/questions/18729405/how-to-convert-utf8-string-to-byte-array
+    function toUTF8Array(str) {
+      var utf8 = [];
+      for (var i=0; i < str.length; i++) {
+        var charcode = str.charCodeAt(i);
+        if (charcode < 0x80) utf8.push(charcode);
+        else if (charcode < 0x800) {
+          utf8.push(0xc0 | (charcode >> 6),
+              0x80 | (charcode & 0x3f));
+        }
+        else if (charcode < 0xd800 || charcode >= 0xe000) {
+          utf8.push(0xe0 | (charcode >> 12),
+              0x80 | ((charcode>>6) & 0x3f),
+              0x80 | (charcode & 0x3f));
+        }
+        // surrogate pair
+        else {
+          i++;
+          // UTF-16 encodes 0x10000-0x10FFFF by
+          // subtracting 0x10000 and splitting the
+          // 20 bits of 0x0-0xFFFFF into two halves
+          charcode = 0x10000 + (((charcode & 0x3ff)<<10)
+            | (str.charCodeAt(i) & 0x3ff));
+          utf8.push(0xf0 | (charcode >>18),
+              0x80 | ((charcode>>12) & 0x3f),
+              0x80 | ((charcode>>6) & 0x3f),
+              0x80 | (charcode & 0x3f));
+        }
+      }
+      return utf8;
+    }
+    return toUTF8Array(s);
+  };
+
+}();
+
+(function (factory) {
+  if (typeof define === 'function' && define.amd) {
+      define([], factory);
+  } else if (typeof exports === 'object') {
+      module.exports = factory();
+  }
+}(function () {
+    return qrcode;
+}));
+</script>
+<script>
+"use strict";
+const cv = document.getElementById('c');
+let c = cv.getContext('2d');
+const H = 540, GROUND = 420, GRAV = 2300, JUMP = 800, TRACK = 12000, START_X = 150;
+const FONT = '"Arial Black","Trebuchet MS",Impact,system-ui,sans-serif';
+let VW = 960, scale = 1, offY = 0, dpr = 1;
+
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(innerWidth * dpr);
+  cv.height = Math.round(innerHeight * dpr);
+  scale = Math.min(cv.height / H, cv.width / 760);
+  VW = cv.width / scale;
+  offY = (cv.height - H * scale) / 2;
+}
+addEventListener('resize', resize); resize();
+
+function rng(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const hash = i => { const s = Math.sin(i * 12.9898 + 78.233) * 43758.5453; return s - Math.floor(s); };
+
+/* ---------------- Sound ---------------- */
+let ac = null, muted = false;
+function sfx(k) {
+  if (muted) return;
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const P = {
+      jump: [520, 820, .12, 'square', .04], hit: [220, 70, .25, 'sawtooth', .06],
+      taco: [660, 1400, .2, 'triangle', .1], fall: [500, 60, .5, 'sine', .12],
+      beep: [440, 440, .15, 'square', .06], go: [880, 880, .35, 'square', .06],
+      win: [523, 1046, .6, 'triangle', .12], join: [700, 1050, .15, 'triangle', .08]
+    }[k];
+    const o = ac.createOscillator(), g = ac.createGain();
+    o.connect(g); g.connect(ac.destination);
+    const n = ac.currentTime;
+    o.type = P[3];
+    o.frequency.setValueAtTime(P[0], n);
+    o.frequency.exponentialRampToValueAtTime(P[1], n + P[2]);
+    g.gain.setValueAtTime(P[4], n);
+    g.gain.exponentialRampToValueAtTime(.001, n + P[2]);
+    o.start(n); o.stop(n + P[2] + .03);
+  } catch (e) {}
+}
+
+/* ---------------- Track ---------------- */
+let obstacles = [], pits = [], trucks = [], hazards = [], tacos = [];
+const TRUCKS = [['#e64b6b', 'TACOS'], ['#3fa7d6', 'KOLACHES'], ['#f29e4c', 'BBQ'], ['#5fbf63', 'QUESO'], ['#9b6bd6', 'BREAKFAST TACOS'], ['#e5c53b', 'ELOTE']];
+const SCOOTER_COLS = [['#1e1f22', '#2ec4b6'], ['#eef0f2', '#ff6b35'], ['#26282c', '#ffd23f'], ['#e4e7ea', '#3a86ff']];
+
+function buildTrack(seed) {
+  const R = rng(seed);
+  obstacles = []; pits = []; trucks = []; hazards = []; tacos = [];
+  let x = 850;
+  while (x < TRACK - 600) {
+    const p = R(); let o;
+    if (p < .26) { o = { type: 'cone', x, y: GROUND - 30, w: 22, h: 30 }; hazards.push(o); }
+    else if (p < .42) {
+      const col = SCOOTER_COLS[R() * SCOOTER_COLS.length | 0];
+      o = R() < .5
+        ? { type: 'scooter', fallen: true, x, y: GROUND - 18, w: 86, h: 18, col: col[0], acc: col[1] }
+        : { type: 'scooter', fallen: false, x, y: GROUND - 50, w: 58, h: 50, col: col[0], acc: col[1] };
+      hazards.push(o);
+    }
+    else if (p < .65) { o = { type: 'pit', x, y: GROUND, w: 110 + (R() * 60 | 0), h: 200 }; pits.push(o); }
+    else if (p < .88) {
+      const h = R() < .5 ? 72 : 96, t = TRUCKS[R() * TRUCKS.length | 0];
+      o = { type: 'truck', x, y: GROUND - h, w: 150 + (R() * 50 | 0), h, col: t[0], label: t[1] }; trucks.push(o);
+    } else {
+      o = { type: 'cone', x, y: GROUND - 30, w: 22, h: 30 }; hazards.push(o); obstacles.push(o);
+      o = { type: 'cone', x: x + 75, y: GROUND - 30, w: 22, h: 30 }; hazards.push(o);
+    }
+    obstacles.push(o);
+    x = o.x + o.w + 340 + R() * 300;
+  }
+  obstacles.sort((a, b) => a.x - b.x);
+  for (let tx = 650; tx < TRACK - 400; tx += 650 + R() * 500) {
+    const k = trucks.find(k => tx > k.x + 10 && tx < k.x + k.w - 30);
+    const y = k ? k.y - 60 : GROUND - 85 - (R() < .5 ? 70 : 0);
+    tacos.push({ x: tx, y, w: 30, h: 22, ph: R() * 6 });
+  }
+}
+
+/* ---------------- Scenery tables ---------------- */
+const MID_F = .4, FAR_F = .13;
+const landmarks = [
+  { x: 500, w: 160, name: 'Frost Bank Tower', draw: () => frostTower() },
+  { x: 1000, w: 140, name: 'The Independent', draw: () => independent() },
+  { x: 1580, w: 560, vis: 1000, name: 'Congress Avenue Bridge Bats', draw: () => congressBridge() },
+  { x: 2300, w: 310, name: 'UT Tower', draw: () => utTower() },
+  { x: 2980, w: 600, name: 'Pennybacker Bridge', draw: () => pennybacker() },
+  { x: 3680, w: 260, name: 'Circuit of the Americas', draw: () => cota() },
+  { x: 4260, w: 360, name: 'Downtown Skyline', draw: () => skylineCluster() },
+  { x: 4990, w: 500, name: 'Texas State Capitol', draw: () => capitol() },
+];
+const nearProps = [
+  { x: 620, name: null, draw: () => moonTower() },
+  { x: 1750, name: null, draw: () => billboard() },
+  { x: 3150, name: 'Austin Motel', draw: () => motel() },
+  { x: 4400, name: 'Moonlight Tower', draw: () => moonTower() },
+  { x: 5700, name: 'Greetings from Austin', draw: () => mural() },
+  { x: 7050, name: 'Paramount Theatre', draw: () => paramount() },
+  { x: 8450, name: 'Sixth Street', draw: () => sixthStreet() },
+  { x: 9600, name: null, draw: () => moonTower() },
+  { x: 10600, name: 'Rainey Street', draw: () => raineySt() },
+];
+const lamps = [];
+for (let x = 300; x < TRACK + 800; x += 380) if (!nearProps.some(p => Math.abs(p.x - x) < 230)) lamps.push(x);
+
+const fillers = [], farB = [], stars = [];
+(function genScenery() {
+  const R = rng(77);
+  const pal = ['#3b2a6e', '#46307d', '#33285f', '#523a8a', '#2e3a74', '#5a3478'];
+  let x = -200;
+  while (x < 5700) {
+    const w = 50 + R() * 70 | 0;
+    const blocked = landmarks.some(l => x + w > l.x - l.w / 2 - 15 && x < l.x + l.w / 2 + 15);
+    if (!blocked) fillers.push({ x, w, h: 80 + R() * 130 | 0, col: pal[R() * pal.length | 0], roof: R() * 4 | 0, seed: R() * 1e6 | 0 });
+    x += w + 6 + R() * 22;
+  }
+  x = -100;
+  while (x < 3000) { const w = 40 + R() * 80 | 0; farB.push({ x, w, h: 90 + R() * 160 | 0, seed: R() * 1e6 | 0 }); x += w + R() * 10; }
+  for (let i = 0; i < 90; i++) stars.push({ x: R(), y: R() * .55, s: R() * 1.6 + .4, p: R() * 6 });
+})();
+
+/* ---------------- Characters & runners ---------------- */
+const CHARS = [
+  { name: 'Brisket', color: '#f07a2a' },
+  { name: 'Queso', color: '#f2c94c' },
+  { name: 'Tex', color: '#46c2c9' },
+  { name: 'Pecan', color: '#d46aa8' },
+];
+function makeRunner(d, i, human, solo) {
+  return {
+    ...d, slot: i, human, x: START_X, y: GROUND - 28, w: 40, h: 28, vy: 0, grounded: true,
+    tag: solo ? (human ? 'YOU' : d.name) : (human ? `P${i + 1} ${d.name}` : `${d.name} · CPU`),
+    base: human ? 330 : 316 + Math.random() * 12,
+    stumble: 0, boost: 0, respawn: 0, blink: 0, coyote: 0, buf: 0, held: false, holdT: 0,
+    taken: new Set(), hit: new Set(), finished: false, ft: 0, fspd: null, anim: Math.random() * 10,
+    ai: { idx: 0, plan: -1, trig: 0, hold: .1, jumped: false, stuck: 0, mistake: .1 + i * .035 }
+  };
+}
+
+let state = 'lobby', t = 0, raceT = 0, countdown = 0, runners = [], cam = 0, resultsT = 0, postT = 0, firstHumanFinishT = -1;
+let finishOrder = [], results = [], goFlash = 0, toast = null, announced = new Set(), best = null, solo = true, round = 1;
+
+function startRace() {
+  const joined = slots.map(s => !!s);
+  solo = !joined.some(Boolean);
+  buildTrack(Math.random() * 1e9 | 0);
+  runners = CHARS.map((d, i) => makeRunner(d, i, solo ? i === 0 : joined[i], solo));
+  state = 'countdown'; countdown = 3; raceT = 0; postT = 0; firstHumanFinishT = -1; finishOrder = []; results = [];
+  cam = 0; announced = new Set(); toast = null; round++;
+  sfx('beep');
+  pushHost(true);
+}
+buildTrack(2026);
+
+/* ---------------- Physics ---------------- */
+const inPit = cx => pits.find(p => cx > p.x + 4 && cx < p.x + p.w - 4);
+const overlap = (a, b, s = 0) => a.x + s < b.x + b.w && a.x + a.w - s > b.x && a.y + s < b.y + b.h && a.y + a.h - s > b.y;
+function safeX(x) {
+  for (let k = 0; k < 6; k++) {
+    const p = pits.find(p => x + 50 > p.x - 10 && x < p.x + p.w + 10);
+    if (p) { x = p.x + p.w + 20; continue; }
+    const tr = trucks.find(tr => x + 45 > tr.x && x < tr.x + tr.w);
+    if (tr) { x = tr.x + tr.w + 20; continue; }
+    break;
+  }
+  return x;
+}
+
+function aiJump(r, hold) { r.buf = .1; r.held = true; r.holdT = hold; }
+function ai(r, dt) {
+  const A = r.ai;
+  if (r.holdT > 0) { r.holdT -= dt; if (r.holdT <= 0) r.held = false; }
+  while (A.idx < obstacles.length && obstacles[A.idx].x + obstacles[A.idx].w < r.x) A.idx++;
+  const o = obstacles[A.idx]; if (!o) return;
+  if (A.plan !== A.idx) {
+    A.plan = A.idx; A.jumped = false; A.stuck = 0;
+    const kind = o.type === 'scooter' ? (o.fallen ? 'fallen' : 'upright') : o.type;
+    A.trig = { cone: 55, fallen: 62, upright: 72, pit: 28, truck: 85 }[kind] + Math.random() * 30;
+    A.hold = { cone: .06, fallen: .1, upright: .16, pit: .3, truck: .18 }[kind] + Math.random() * .1;
+    if (Math.random() < A.mistake) A.trig = Math.random() < .5 ? A.trig + 170 : -30;
+  }
+  const dist = o.x - (r.x + r.w);
+  if (!A.jumped && r.grounded && dist <= A.trig * (r.boost > 0 ? 1.5 : 1)) { aiJump(r, A.hold); A.jumped = true; }
+  if (o.type === 'truck' && r.grounded && dist < 2 && r.y + r.h > o.y + 5) {
+    A.stuck += dt; if (A.stuck > .3) { aiJump(r, .25); A.stuck = 0; }
+  }
+}
+
+function focusRunner() {
+  const hs = runners.filter(r => r.human);
+  if (!hs.length) return runners[0];
+  return hs.reduce((a, b) => (b.x > a.x ? b : a));
+}
+
+function updateRunner(r, dt, focus) {
+  r.anim += dt;
+  if (r.respawn > 0) { r.respawn -= dt; return; }
+  if (r.blink > 0) r.blink -= dt;
+  if (r.stumble > 0) r.stumble -= dt;
+  if (r.boost > 0) r.boost -= dt;
+  let spd = r.base * (r.boost > 0 ? 1.5 : 1) * (r.stumble > 0 ? .35 : 1);
+  if (!r.human && !r.finished) {
+    const d = r.x - focus.x;
+    if (d > 500) spd *= .94; else if (d < -500) spd *= 1.07;
+    ai(r, dt);
+  }
+  if (r.finished) { r.fspd = Math.max(0, (r.fspd ?? spd) - 350 * dt); spd = r.fspd; }
+
+  r.coyote = r.grounded ? .09 : r.coyote - dt;
+  r.buf -= dt;
+  if (r.buf > 0 && r.coyote > 0 && !r.finished) {
+    r.vy = -JUMP; r.grounded = false; r.coyote = 0; r.buf = 0;
+    if (r.human) sfx('jump');
+  }
+  let nx = r.x + spd * dt;
+  for (const k of trucks) {
+    if (r.y + r.h > k.y + 3 && r.y < k.y + k.h && r.x + r.w <= k.x + 1 && nx + r.w > k.x) nx = k.x - r.w;
+  }
+  if (r.y + r.h > GROUND + 4) {
+    const p = pits.find(p => r.x + r.w / 2 > p.x - 12 && r.x + r.w / 2 < p.x + p.w + 12);
+    if (p) nx = Math.max(p.x, Math.min(nx, p.x + p.w - r.w));
+  }
+  r.x = nx;
+  const g = GRAV * ((r.held && r.vy < 0) ? .5 : 1);
+  r.vy = Math.min(r.vy + g * dt, 1500);
+  let ny = r.y + r.vy * dt;
+  r.grounded = false;
+  if (r.vy >= 0) {
+    for (const k of trucks) {
+      if (r.x + r.w > k.x + 4 && r.x < k.x + k.w - 4 && r.y + r.h <= k.y + 2 && ny + r.h >= k.y) {
+        ny = k.y - r.h; r.vy = 0; r.grounded = true; break;
+      }
+    }
+    if (!r.grounded && r.y + r.h <= GROUND + 2 && ny + r.h >= GROUND && !inPit(r.x + r.w / 2)) {
+      ny = GROUND - r.h; r.vy = 0; r.grounded = true;
+    }
+  }
+  r.y = ny;
+  if (r.y > GROUND + 150) {
+    const p = pits.find(p => r.x + r.w > p.x - 10 && r.x < p.x + p.w + 10);
+    if (p) r.x = p.x - 95;
+    r.y = GROUND - r.h; r.vy = 0; r.respawn = .8; r.blink = 1.5; r.grounded = true; r.stumble = 0;
+    r.ai.plan = -1; r.held = false;
+    if (r.human) sfx('fall');
+    return;
+  }
+  if (r.blink <= 0) {
+    for (let i = 0; i < hazards.length; i++) {
+      const hz = hazards[i];
+      if (!r.hit.has(i) && overlap(r, hz, 5)) {
+        r.hit.add(i); r.stumble = .75; hz.wob = 1;
+        if (r.grounded) { r.vy = -220; r.grounded = false; }
+        if (r.human) sfx('hit');
+      }
+    }
+  }
+  for (let i = 0; i < tacos.length; i++) {
+    const tc = tacos[i];
+    if (!r.taken.has(i) && overlap(r, { x: tc.x, y: tc.y + Math.sin(t * 3 + tc.ph) * 5, w: tc.w, h: tc.h }, -4)) {
+      r.taken.add(i); r.boost = 1.8; r.stumble = 0;
+      if (r.human) sfx('taco');
+    }
+  }
+  if (!r.finished && r.x + r.w >= TRACK) {
+    r.finished = true; r.ft = raceT; finishOrder.push(r);
+    if (r.human) sfx('win');
+  }
+}
+
+function placeOf(r) {
+  let ahead = 0;
+  for (const o of runners) {
+    if (o === r) continue;
+    if (o.finished && (!r.finished || o.ft < r.ft)) ahead++;
+    else if (!o.finished && !r.finished && o.x > r.x) ahead++;
+  }
+  return ahead;
+}
+const ORD = ['1st', '2nd', '3rd', '4th'];
+
+function update(dt) {
+  if (goFlash > 0) goFlash -= dt;
+  if (toast) { toast.t -= dt; if (toast.t <= 0) toast = null; }
+  if (state === 'lobby') { cam += 70 * dt; if (cam > TRACK - VW) cam = 0; return; }
+  if (state === 'countdown') {
+    const prev = Math.ceil(countdown);
+    countdown -= dt;
+    if (countdown > 0 && Math.ceil(countdown) !== prev) sfx('beep');
+    if (countdown <= 0) { state = 'race'; goFlash = .9; sfx('go'); pushHost(true); }
+    return;
+  }
+  if (state === 'race') raceT += dt; else resultsT += dt;
+  const focus = focusRunner();
+  for (const r of runners) updateRunner(r, dt, focus);
+  const humans = runners.filter(r => r.human);
+  const lead = humans.length > 1 ? .55 : .3;
+  const target = Math.max(0, focus.x - VW * lead);
+  cam += (target - cam) * Math.min(1, dt * 7);
+  // keep every human racer on screen: stragglers get carried forward (Fun Run style)
+  if (state === 'race' && humans.length > 1) {
+    for (const h of humans) {
+      if (!h.finished && h.respawn <= 0 && h.x + h.w < cam + 4 && cam > 50) {
+        h.x = safeX(cam + 70); h.y = GROUND - h.h; h.vy = 0; h.blink = 1.2; h.stumble = .4; h.ai.plan = -1;
+      }
+    }
+  }
+  for (const l of landmarks) {
+    const sx = l.x - cam * MID_F;
+    if (!announced.has(l.name) && sx < VW * .62) { announced.add(l.name); toast = { text: l.name, t: 2.6 }; }
+  }
+  for (const n of nearProps) {
+    if (!n.name) continue;
+    if (!announced.has(n.name) && n.x - cam < VW * .62) { announced.add(n.name); toast = { text: n.name, t: 2.6 }; }
+  }
+  if (state === 'race') {
+    const humansDone = humans.length && humans.every(h => h.finished);
+    if (humans.some(h => h.finished) && firstHumanFinishT < 0) firstHumanFinishT = raceT;
+    if (humansDone) postT += dt;
+    const allDone = finishOrder.length === runners.length;
+    if (allDone || postT > 4 || (firstHumanFinishT >= 0 && raceT - firstHumanFinishT > 15)) {
+      results = [...finishOrder, ...runners.filter(r => !r.finished).sort((a, b) => b.x - a.x)];
+      state = 'results'; resultsT = 0;
+      if (solo && runners[0].finished && (best === null || runners[0].ft < best)) best = runners[0].ft;
+      pushHost(true);
+    }
+  }
+}
+
+/* ---------------- Drawing helpers ---------------- */
+function rr(x, y, w, h, r) { c.beginPath(); c.roundRect ? c.roundRect(x, y, w, h, r) : c.rect(x, y, w, h); }
+function windows(x, y, w, h, cols, rows, col, p, seed) {
+  const R = rng(seed), cw = w / cols, rh = h / rows;
+  c.fillStyle = col;
+  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) if (R() < p) c.fillRect(x + i * cw + cw * .25, y + j * rh + rh * .28, cw * .5, rh * .44);
+}
+function glow(x, y, r, col) {
+  const g = c.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, col); g.addColorStop(1, 'rgba(0,0,0,0)');
+  c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+}
+function txt(s, x, y, size, col, align = 'center', font = FONT) {
+  c.font = `${size}px ${font}`; c.fillStyle = col; c.textAlign = align; c.textBaseline = 'middle'; c.fillText(s, x, y);
+}
+function fitTxt(s, x, y, maxW, size, col) {
+  c.font = `${size}px ${FONT}`;
+  const w = c.measureText(s).width;
+  if (w > maxW) size = size * maxW / w;
+  txt(s, x, y, size, col);
+}
+function poly(pts, fill) { c.beginPath(); c.moveTo(pts[0], pts[1]); for (let i = 2; i < pts.length; i += 2) c.lineTo(pts[i], pts[i + 1]); c.closePath(); if (fill) { c.fillStyle = fill; c.fill(); } }
+function line(x1, y1, x2, y2, col, w) { c.strokeStyle = col; c.lineWidth = w; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); }
+// shade the right-hand side of whatever is drawn by fn (gives buildings a lit face and a shadow face)
+function shadeRight(x0, fn, col = 'rgba(10,0,40,.28)') { c.save(); c.beginPath(); c.rect(x0, -2000, 2000, 2000); c.clip(); c.globalCompositeOperation = 'source-over'; fn(col); c.restore(); }
+function bat(x, y, s, f) {
+  const fl = Math.sin(f) * 4 * s;
+  c.beginPath(); c.moveTo(x, y);
+  c.quadraticCurveTo(x - 5 * s, y - 4 * s - fl, x - 10 * s, y - fl);
+  c.quadraticCurveTo(x - 5 * s, y - 1 * s, x, y + 2 * s);
+  c.quadraticCurveTo(x + 5 * s, y - 1 * s, x + 10 * s, y - fl);
+  c.quadraticCurveTo(x + 5 * s, y - 4 * s - fl, x, y);
+  c.fill();
+}
+function hLines(x, y, w, h, step, col, lw = 1) { c.fillStyle = col; for (let yy = y; yy < y + h; yy += step) c.fillRect(x, yy, w, lw); }
+function vLines(x, y, w, h, step, col, lw = 1) { c.fillStyle = col; for (let xx = x; xx < x + w; xx += step) c.fillRect(xx, y, lw, h); }
+
+/* ---------------- Landmarks (mid layer; origin = base center at street level) ---------------- */
+
+// Frost Bank Tower: blue-glass slab with notched corners and a faceted, eared "owl" crown + spire
+function frostTower() {
+  glow(0, -300, 190, 'rgba(140,190,255,.16)');
+  const W = 42, top = -300;
+  // podium
+  c.fillStyle = '#2a4570'; c.fillRect(-78, -36, 156, 36);
+  windows(-75, -32, 150, 28, 14, 2, '#ffe9a8', .7, 12);
+  // shaft
+  const body = col => {
+    c.fillStyle = col || '#3e73ae'; c.fillRect(-W, top, W * 2, -top - 36);
+  };
+  body();
+  c.fillStyle = '#5b93d0'; c.fillRect(-W, top, 9, -top - 36);          // lit corner notch
+  c.fillStyle = '#2b5a90'; c.fillRect(W - 9, top, 9, -top - 36);       // shadow corner notch
+  c.fillStyle = 'rgba(160,210,255,.25)'; c.fillRect(-W + 9, top, 3, -top - 36); c.fillRect(W - 12, top, 3, -top - 36);
+  hLines(-W, top + 4, W * 2, -top - 40, 8, 'rgba(170,215,255,.22)');
+  vLines(-W + 14, top, W * 2 - 28, -top - 36, 7, 'rgba(20,50,90,.35)');
+  windows(-W + 12, top + 6, W * 2 - 24, -top - 46, 8, 30, '#ffe9a8', .22, 11);
+  shadeRight(0, col => { c.fillStyle = col; c.fillRect(0, top, W, -top - 36); });
+  // faceted crown: three eared tiers + spire
+  const tiers = [
+    [-42, top, -40, top - 44, -24, top - 22, 24, top - 22, 40, top - 44, 42, top],
+    [-26, top - 22, -24, top - 66, -12, top - 50, 12, top - 50, 24, top - 66, 26, top - 22],
+    [-13, top - 50, -11, top - 88, -4, top - 78, 4, top - 78, 11, top - 88, 13, top - 50],
+  ];
+  const tc = ['#4d86c4', '#609ad6', '#78afe6'];
+  tiers.forEach((p, i) => { poly(p, tc[i]); });
+  poly([-4, top - 78, 0, top - 150, 4, top - 78], '#8cc0f0');
+  shadeRight(0, col => { tiers.forEach(p => poly(p, col)); poly([-4, top - 78, 0, top - 150, 4, top - 78], col); }, 'rgba(10,20,60,.35)');
+  // crown edge lighting
+  c.strokeStyle = 'rgba(230,245,255,.75)'; c.lineWidth = 1.2;
+  tiers.forEach(p => { c.beginPath(); c.moveTo(p[0], p[1]); for (let i = 2; i < p.length; i += 2) c.lineTo(p[i], p[i + 1]); c.stroke(); });
+  if (Math.sin(t * 3) > 0) glow(0, top - 152, 10, 'rgba(255,60,60,.95)');
+}
+
+// The Independent ("Jenga Tower"): five glassy blocks that shift side to side, white slab edges
+function independent() {
+  const blocks = [[0, 82], [26, 64], [-16, 74], [22, 62], [-6, 72]];
+  const W = 92; let y = 0;
+  blocks.forEach(([off, h], i) => {
+    const x = off - W / 2; y -= h;
+    c.fillStyle = '#7aa3bf'; c.fillRect(x, y, W, h);
+    c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(x, y, 14, h);
+    windows(x + 2, y + 2, W - 4, h - 4, 12, Math.round(h / 7), '#ffe2a0', .3, 50 + i);
+    hLines(x, y + 6, W, h - 6, 7, 'rgba(245,250,255,.7)', 1.5);
+    shadeRight(off + 6, col => { c.fillStyle = col; c.fillRect(x, y, W, h); }, 'rgba(20,30,70,.25)');
+    c.fillStyle = 'rgba(15,10,40,.45)'; c.fillRect(x, y + h - 3, W, 3); // underside shadow
+  });
+  c.fillStyle = '#5d7f99'; c.fillRect(-26, y - 10, 40, 10);
+}
+
+// Ann W. Richards Congress Avenue Bridge: low concrete arches, balustrade, and the nightly bat ribbon
+function congressBridge() {
+  c.fillStyle = '#244679'; c.fillRect(-290, -44, 580, 44);
+  c.strokeStyle = 'rgba(255,220,160,.35)'; c.lineWidth = 2;
+  for (let i = 0; i < 10; i++) { const x = -270 + i * 58 + Math.sin(t + i) * 8; c.beginPath(); c.moveTo(x, -22 + (i % 3) * 7); c.lineTo(x + 24, -22 + (i % 3) * 7); c.stroke(); }
+  const span = 580 / 7;
+  c.fillStyle = '#cfc4b2';
+  c.fillRect(-290, -78, 580, 18);
+  for (let i = 0; i < 7; i++) {
+    const x = -290 + i * span;
+    c.beginPath(); c.moveTo(x, -60); c.lineTo(x + span, -60); c.lineTo(x + span, -40); c.lineTo(x + span - 9, -40);
+    c.quadraticCurveTo(x + span / 2, -78, x + 9, -40); c.lineTo(x, -40); c.fill();
+    c.fillStyle = '#b3a793'; c.fillRect(x - 4, -60, 8, 22); c.fillStyle = '#cfc4b2';
+  }
+  c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(-290, -62, 580, 3);
+  // balustrade
+  c.fillStyle = '#e2d9c8'; c.fillRect(-290, -86, 580, 3);
+  for (let x = -288; x < 290; x += 6) c.fillRect(x, -84, 2, 6);
+  for (let x = -270; x < 290; x += 52) {
+    c.fillStyle = '#5a5470'; c.fillRect(x, -110, 2, 26);
+    glow(x + 1, -112, 8, 'rgba(255,220,130,.85)');
+  }
+  // bats stream out from under the bridge and ribbon away into the dusk
+  c.fillStyle = '#140b22';
+  const N = 170;
+  for (let i = 0; i < N; i++) {
+    const s = ((i / N) + t * .035) % 1;
+    const px = -150 + s * 560 + Math.sin(s * 4 + t * .5) * 20;
+    const py = -55 - s * 300 + Math.sin(s * 7 + t * .8) * 22;
+    const spread = 6 + s * 46;
+    const jx = (hash(i) - .5) * spread * 2, jy = (hash(i + 77) - .5) * spread;
+    bat(px + jx, py + jy, 1 - s * .55, t * 22 + i);
+  }
+}
+
+// UT Tower: limestone shaft with recessed bays, clocks, orange-lit colonnade and tempietto on top
+function utTower() {
+  glow(0, -340, 150, 'rgba(255,140,30,.38)');
+  // Main Building
+  c.fillStyle = '#e1d0a8'; c.fillRect(-155, -80, 310, 80);
+  c.fillStyle = '#cdbb92'; c.fillRect(-155, -14, 310, 14);
+  for (let x = -146; x < 150; x += 17) {
+    c.fillStyle = '#ffe0a0'; c.fillRect(x, -62, 9, 18); c.beginPath(); c.arc(x + 4.5, -62, 4.5, Math.PI, 0); c.fill();
+    c.fillStyle = 'rgba(255,224,160,.7)'; c.fillRect(x + 1, -36, 7, 12);
+  }
+  poly([-162, -80, -140, -100, 140, -100, 162, -80], '#b0503a');
+  hLines(-150, -98, 300, 18, 4, 'rgba(90,30,20,.35)');
+  // shaft
+  const top = -306;
+  c.fillStyle = '#ecdcb6'; c.fillRect(-29, top, 58, -top - 100);
+  for (const bx of [-21, -4, 13]) {
+    c.fillStyle = 'rgba(70,50,35,.6)'; c.fillRect(bx, top + 10, 8, -top - 120);
+    hLines(bx, top + 14, 8, -top - 126, 12, 'rgba(236,220,182,.9)', 2);
+    windows(bx, top + 10, 8, -top - 120, 1, 15, '#ffd890', .35, bx + 300);
+  }
+  shadeRight(4, col => { c.fillStyle = col; c.fillRect(-29, top, 58, -top - 100); }, 'rgba(60,30,40,.22)');
+  // clock stage
+  c.fillStyle = '#efe0bb'; c.fillRect(-32, top - 22, 64, 24);
+  c.fillStyle = '#fff6dc'; c.beginPath(); c.arc(0, top - 10, 9, 0, 7); c.fill();
+  c.strokeStyle = '#4a3a2a'; c.lineWidth = 1.4; c.beginPath(); c.arc(0, top - 10, 9, 0, 7); c.stroke();
+  line(0, top - 10, 0, top - 16, '#4a3a2a', 1.4); line(0, top - 10, 4, top - 9, '#4a3a2a', 1.4);
+  // observation colonnade (lit orange)
+  c.fillStyle = '#f5e5c0'; c.fillRect(-35, top - 27, 70, 5);
+  c.fillStyle = '#ff8a1e'; c.fillRect(-31, top - 55, 62, 28);
+  c.fillStyle = '#ffd8a0'; for (let x = -29; x < 31; x += 9.6) c.fillRect(x, top - 54, 3.5, 27);
+  c.fillStyle = '#ffa448'; c.fillRect(-37, top - 61, 74, 6);
+  // attic with corner urns
+  c.fillStyle = '#ff9533'; c.fillRect(-25, top - 76, 50, 15);
+  c.fillStyle = '#ffc47a'; for (const ux of [-25, 21]) { c.fillRect(ux, top - 82, 4, 6); }
+  // tempietto + cap
+  c.fillStyle = '#ff8a1e'; c.fillRect(-15, top - 96, 30, 20);
+  c.fillStyle = '#ffd8a0'; for (let x = -13; x < 15; x += 6) c.fillRect(x, top - 95, 2, 18);
+  c.fillStyle = '#ff9d3f'; c.beginPath(); c.moveTo(-18, top - 96); c.quadraticCurveTo(0, top - 118, 18, top - 96); c.fill();
+  line(0, top - 112, 0, top - 126, '#ffc47a', 2);
+}
+
+// Pennybacker Bridge: weathering-steel through-arch springing from limestone cliffs over Lake Austin
+function pennybacker() {
+  const deckY = -112;
+  const archY = x => -38 - 168 * (1 - (x / 172) * (x / 172));
+  // water
+  c.fillStyle = '#244f74'; c.fillRect(-220, -30, 440, 30);
+  c.strokeStyle = 'rgba(255,200,150,.3)'; c.lineWidth = 1.5;
+  for (let i = 0; i < 6; i++) { const x = -180 + i * 60 + Math.sin(t * .8 + i) * 6; c.beginPath(); c.moveTo(x, -14); c.lineTo(x + 20, -14); c.stroke(); }
+  // cliffs with limestone strata and juniper scrub
+  for (const sx of [-1, 1]) {
+    c.save(); c.scale(sx, 1);
+    poly([300, 0, 300, deckY + 2, 196, deckY + 2, 184, -80, 196, -52, 170, -26, 178, 0], '#b6a386');
+    c.fillStyle = 'rgba(120,100,80,.45)';
+    for (let y = deckY + 12; y < 0; y += 11) c.fillRect(184 + (y % 3) * 4, y, 116, 2);
+    c.fillStyle = '#2d4a33';
+    for (let x = 200; x < 300; x += 13) { c.beginPath(); c.arc(x, deckY - 2, 7 + hash(x) * 5, 0, 7); c.fill(); }
+    c.restore();
+  }
+  // struts below the deck near the abutments
+  c.strokeStyle = '#8f3c1b'; c.lineWidth = 2.5;
+  for (const sx of [-1, 1]) for (let x = 134; x <= 166; x += 10) { c.beginPath(); c.moveTo(sx * x, archY(x)); c.lineTo(sx * x, deckY); c.stroke(); }
+  // arch rib
+  c.strokeStyle = '#a4441c'; c.lineWidth = 10; c.beginPath();
+  for (let x = -172; x <= 172; x += 4) { x === -172 ? c.moveTo(x, archY(x)) : c.lineTo(x, archY(x)); } c.stroke();
+  c.strokeStyle = '#cf6a33'; c.lineWidth = 2; c.beginPath();
+  for (let x = -170; x <= 170; x += 4) { const y = archY(x) - 4; x === -170 ? c.moveTo(x, y) : c.lineTo(x, y); } c.stroke();
+  // hangers above the deck
+  c.strokeStyle = '#b5532a'; c.lineWidth = 1.6;
+  for (let x = -120; x <= 120; x += 12) { c.beginPath(); c.moveTo(x, archY(x) + 3); c.lineTo(x, deckY); c.stroke(); }
+  // deck + traffic lights
+  c.fillStyle = '#4e4558'; c.fillRect(-300, deckY, 600, 9);
+  c.fillStyle = '#6b6178'; c.fillRect(-300, deckY - 3, 600, 3);
+  for (let i = 0; i < 6; i++) {
+    const x = ((t * 90 + i * 110) % 600) - 300;
+    c.fillStyle = i % 2 ? '#ff4d4d' : '#fff3c4'; c.fillRect(x, deckY - 6, 5, 3);
+  }
+}
+
+// Circuit of the Americas observation tower: white core, observation deck, sweeping red "veil"
+function cota() {
+  glow(0, -220, 170, 'rgba(255,70,60,.14)');
+  c.fillStyle = '#ece6dc'; c.fillRect(-5, -268, 10, 268);
+  c.strokeStyle = '#bdb4a6'; c.lineWidth = 1;
+  c.beginPath(); for (let y = 0; y > -255; y -= 14) { c.moveTo(-11, y); c.lineTo(11, y - 7); c.lineTo(-11, y - 14); } c.stroke();
+  c.strokeStyle = '#e2231a'; c.lineWidth = 1.7;
+  for (let i = 0; i < 17; i++) {
+    const bx = -135 + i * (270 / 16);
+    c.beginPath(); c.moveTo(bx * .17, -266);
+    c.bezierCurveTo(bx * .2, -175, bx * .62, -70, bx, 0); c.stroke();
+  }
+  c.strokeStyle = 'rgba(255,120,100,.5)'; c.lineWidth = .8;
+  for (let i = 0; i < 16; i++) { const bx = -126 + i * (270 / 16); c.beginPath(); c.moveTo(bx * .17, -266); c.bezierCurveTo(bx * .2, -175, bx * .62, -70, bx, 0); c.stroke(); }
+  c.fillStyle = '#9ad1ff'; c.fillRect(-28, -284, 56, 11);
+  c.fillStyle = '#f4f0ea';
+  c.beginPath(); c.ellipse(0, -272, 32, 5, 0, 0, 7); c.fill();
+  c.beginPath(); c.ellipse(0, -286, 34, 4, 0, 0, 7); c.fill();
+  line(0, -290, 0, -306, '#ddd', 2);
+  if (Math.sin(t * 2.5) > 0) glow(0, -308, 9, 'rgba(255,60,60,.9)');
+}
+
+// Downtown towers with recognizable tops: 360 Condos, The Austonian, the "Sail", Fairmont
+function skylineCluster() {
+  // 360 Condominiums: glass with white fins and a sloped top
+  c.fillStyle = '#3f6f86'; c.fillRect(-175, -280, 62, 280);
+  vLines(-175, -280, 62, 280, 8, 'rgba(240,245,255,.55)', 2);
+  windows(-173, -272, 58, 268, 7, 20, '#ffe9a8', .3, 31);
+  poly([-175, -280, -113, -320, -113, -280], '#4f8aa6');
+  // The Austonian: slim, tallest, curved lit crown
+  c.fillStyle = '#4a4f86'; c.fillRect(-100, -400, 46, 400);
+  hLines(-100, -396, 46, 396, 7, 'rgba(200,210,255,.18)');
+  windows(-98, -392, 42, 388, 5, 50, '#ffe9a8', .32, 32);
+  const cg = c.createLinearGradient(0, -450, 0, -400); cg.addColorStop(0, '#fff'); cg.addColorStop(1, '#bcd2ff');
+  c.fillStyle = cg; c.beginPath(); c.moveTo(-100, -400); c.quadraticCurveTo(-96, -440, -54, -452); c.lineTo(-54, -400); c.closePath(); c.fill();
+  glow(-70, -425, 40, 'rgba(220,235,255,.35)');
+  // "The Sail" (500 W 2nd): curved sail-shaped top
+  c.fillStyle = '#356f97'; c.fillRect(-42, -300, 74, 300);
+  hLines(-42, -296, 74, 296, 9, 'rgba(180,225,255,.2)');
+  windows(-40, -292, 70, 288, 8, 24, '#ffe9a8', .35, 33);
+  c.fillStyle = '#4a8bbb'; c.beginPath(); c.moveTo(-42, -300); c.quadraticCurveTo(10, -310, 32, -362); c.lineTo(32, -300); c.closePath(); c.fill();
+  // Fairmont: chunky with lit crown band
+  c.fillStyle = '#5a4588'; c.fillRect(42, -250, 86, 250);
+  windows(45, -240, 80, 236, 9, 18, '#ffd98a', .45, 34);
+  c.fillStyle = '#ffd98a'; c.fillRect(42, -258, 86, 6);
+  c.fillStyle = '#6b55a0'; c.fillRect(60, -272, 50, 14);
+  // 5th & Colorado-ish shorter mid-rise
+  c.fillStyle = '#2f3e70'; c.fillRect(132, -170, 48, 170);
+  windows(134, -164, 44, 160, 5, 14, '#ffe9a8', .4, 35);
+  shadeRight(-60, col => { c.fillStyle = col; c.fillRect(-60, -500, 260, 500); }, 'rgba(10,0,40,.08)');
+}
+
+// Texas State Capitol: pink granite, long wings with end pavilions, portico, tall drum and dome, Goddess of Liberty
+function capitol() {
+  const stone = '#e8a795', shade = '#c8826f', trim = '#f7cdbb', win = '#ffe1a8';
+  glow(0, -210, 290, 'rgba(255,190,150,.2)');
+  // wings
+  c.fillStyle = shade; c.fillRect(-245, -88, 490, 88);
+  c.fillStyle = trim; c.fillRect(-249, -92, 498, 5); c.fillRect(-245, -46, 490, 3);
+  for (const sx of [-1, 1]) {
+    for (let i = 0; i < 7; i++) {
+      const x = sx * (95 + i * 12) - (sx < 0 ? 6 : 0);
+      c.fillStyle = win; c.fillRect(x, -80, 6, 12); c.beginPath(); c.arc(x + 3, -80, 3, Math.PI, 0); c.fill();
+      c.fillRect(x, -38, 6, 12);
+    }
+    // end pavilions
+    const px = sx < 0 ? -245 : 175;
+    c.fillStyle = stone; c.fillRect(px, -104, 70, 104);
+    poly([px - 3, -104, px + 35, -122, px + 73, -104], stone);
+    c.fillStyle = trim; c.fillRect(px - 3, -106, 76, 3);
+    c.fillStyle = '#fff1dd'; for (let i = 0; i < 4; i++) c.fillRect(px + 8 + i * 16, -98, 4, 52);
+    windows(px + 4, -42, 62, 40, 4, 2, win, .9, px);
+  }
+  // central pavilion & portico
+  c.fillStyle = stone; c.fillRect(-82, -132, 164, 132);
+  c.fillStyle = shade; c.fillRect(-82, -42, 164, 42);
+  c.fillStyle = '#5a2a2a'; for (const dx of [-40, 0, 40]) { c.fillRect(dx - 8, -32, 16, 32); c.beginPath(); c.arc(dx, -32, 8, Math.PI, 0); c.fill(); }
+  c.fillStyle = '#fff1dd'; for (let i = 0; i < 6; i++) c.fillRect(-66 + i * 25.5, -120, 7, 78);
+  c.fillStyle = trim; c.fillRect(-86, -128, 172, 8);
+  poly([-90, -128, 0, -158, 90, -128], stone);
+  c.strokeStyle = trim; c.lineWidth = 2; c.beginPath(); c.moveTo(-84, -130); c.lineTo(0, -155); c.lineTo(84, -130); c.stroke();
+  // lower drum
+  c.fillStyle = stone; c.fillRect(-64, -208, 128, 52);
+  c.fillStyle = trim; for (let x = -60; x < 64; x += 13) c.fillRect(x, -204, 3, 46);
+  c.fillStyle = win; for (let x = -55; x < 60; x += 13) { c.fillRect(x, -196, 6, 14); c.beginPath(); c.arc(x + 3, -196, 3, Math.PI, 0); c.fill(); }
+  c.fillStyle = trim; c.fillRect(-70, -212, 140, 5);
+  // upper drum peristyle
+  c.fillStyle = shade; c.fillRect(-55, -248, 110, 36);
+  c.fillStyle = win; c.fillRect(-50, -244, 100, 28);
+  c.fillStyle = '#fff1dd'; for (let x = -53; x < 55; x += 9) c.fillRect(x, -246, 4, 34);
+  c.fillStyle = trim; c.fillRect(-60, -252, 120, 5);
+  // dome
+  c.fillStyle = stone; c.beginPath(); c.moveTo(-54, -252); c.bezierCurveTo(-54, -310, -24, -334, 0, -336); c.bezierCurveTo(24, -334, 54, -310, 54, -252); c.fill();
+  shadeRight(6, col => { c.fillStyle = col; c.beginPath(); c.moveTo(-54, -252); c.bezierCurveTo(-54, -310, -24, -334, 0, -336); c.bezierCurveTo(24, -334, 54, -310, 54, -252); c.fill(); }, 'rgba(90,30,40,.18)');
+  c.strokeStyle = shade; c.lineWidth = 1.3;
+  for (let i = -4; i <= 4; i++) { c.beginPath(); c.moveTo(i * 13, -252); c.quadraticCurveTo(i * 10, -310, 0, -334); c.stroke(); }
+  c.fillStyle = win; for (let i = -3; i <= 3; i++) { c.beginPath(); c.ellipse(i * 13, -268, 2.2, 3.2, 0, 0, 7); c.fill(); }
+  // lantern + Goddess of Liberty
+  c.fillStyle = stone; c.fillRect(-11, -360, 22, 26);
+  c.fillStyle = win; c.fillRect(-8, -356, 16, 18);
+  c.fillStyle = '#fff1dd'; for (const x of [-9, -3, 3, 8]) c.fillRect(x, -357, 2, 20);
+  c.fillStyle = stone; c.beginPath(); c.arc(0, -360, 12, Math.PI, 0); c.fill();
+  c.fillStyle = '#f2e3c6';
+  poly([-3, -372, 3, -372, 2, -388, -2, -388], '#f2e3c6');
+  c.beginPath(); c.arc(0, -391, 3, 0, 7); c.fill();
+  line(2, -386, 7, -400, '#f2e3c6', 1.6);
+  glow(7, -402, 6, 'rgba(255,240,180,.9)');
+  // Texas flag
+  line(-205, -106, -205, -150, '#ddd', 2);
+  const wv = Math.sin(t * 4) * 1.5;
+  c.fillStyle = '#1f4fa8'; c.fillRect(-204, -150, 11, 16);
+  c.fillStyle = '#fff'; c.fillRect(-193, -150 + wv * .3, 21, 8);
+  c.fillStyle = '#d62b2b'; c.fillRect(-193, -142 + wv * .3, 21, 8);
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(-198.5, -142, 2, 0, 7); c.fill();
+}
+
+/* ---------------- E-scooters ---------------- */
+function wheel(x, y, r) {
+  c.fillStyle = '#121212'; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+  c.fillStyle = '#6d7076'; c.beginPath(); c.arc(x, y, r * .55, 0, 7); c.fill();
+  c.fillStyle = '#c9ccd1'; c.beginPath(); c.arc(x, y, r * .22, 0, 7); c.fill();
+}
+// parked on its kickstand (side view)
+function scooterUpright(o) {
+  const body = o.col, acc = o.acc;
+  line(22, -9, 14, 0, '#3a3a3a', 2);                         // kickstand
+  wheel(9, -7, 7); wheel(50, -7, 7);
+  c.strokeStyle = body; c.lineWidth = 3; c.beginPath(); c.arc(9, -7, 9.5, Math.PI * 1.05, Math.PI * 1.8); c.stroke(); // rear fender
+  c.fillStyle = '#ff2b2b'; c.fillRect(-1, -15, 4, 3); glow(1, -13.5, 7, 'rgba(255,40,40,.55)');
+  c.fillStyle = '#2a2c30'; c.fillRect(13, -9, 28, 3);          // battery pack
+  c.fillStyle = body; rr(4, -15, 42, 7, 3); c.fill();          // deck
+  c.fillStyle = '#18191b'; c.fillRect(8, -16, 34, 2);         // grip tape
+  c.fillStyle = acc; c.fillRect(8, -11, 30, 1.5);              // accent stripe
+  line(45, -12, 50, -7, '#2a2c30', 3);                         // fork
+  line(46, -12, 41, -57, body, 4.2);                           // stem (tilted back)
+  line(45.1, -20, 44.4, -27, acc, 4.6);                        // folding collar
+  c.fillStyle = '#fff'; c.save(); c.translate(43.5, -42); c.rotate(-.11); c.fillRect(-1.5, -3, 3, 6); c.restore(); // QR plate
+  c.fillStyle = 'rgba(255,250,215,.13)'; poly([46, -34, 90, -22, 90, -6], 'rgba(255,250,215,.13)'); // headlight beam
+  c.fillStyle = '#fffbe0'; c.beginPath(); c.arc(46.5, -34, 2, 0, 7); c.fill();
+  c.fillStyle = '#1b1c1f'; rr(34, -61, 15, 4, 2); c.fill();   // handlebar + grip
+  c.fillStyle = acc; c.fillRect(39, -63, 6, 2);                // display
+  line(47, -59, 52, -55, '#888', 1.2);                         // brake lever
+}
+// knocked over on its side: deck face-on, stem flat on the sidewalk, one grip sticking up
+function scooterFallen(o) {
+  const body = o.col, acc = o.acc;
+  c.fillStyle = 'rgba(0,0,0,.28)'; c.beginPath(); c.ellipse(44, -1, 46, 3, 0, 0, 7); c.fill();
+  rr(0, -9, 14, 7, 3.5); c.fillStyle = '#121212'; c.fill();     // rear tire (tread)
+  c.fillStyle = body; rr(7, -15, 44, 12, 5); c.fill();           // deck top surface
+  c.fillStyle = '#18191b'; rr(10, -13, 38, 8, 3); c.fill();      // grip tape
+  c.fillStyle = acc; c.fillRect(12, -10, 34, 1.5);
+  c.fillStyle = '#ff2b2b'; c.fillRect(3, -14, 3, 3);
+  rr(47, -9, 14, 7, 3.5); c.fillStyle = '#121212'; c.fill();     // front tire
+  line(58, -8, 84, -9, body, 4.5);                               // stem lying flat
+  line(64, -8, 70, -8, acc, 5);
+  c.fillStyle = '#fffbe0'; c.beginPath(); c.arc(62, -12, 1.8, 0, 7); c.fill();
+  line(84, -4, 84, -30, '#1b1c1f', 3.5);                         // handlebar pointing up
+  c.fillStyle = '#2a2b2f'; rr(81.5, -34, 5, 9, 2); c.fill();     // grip
+  line(84, -24, 89, -20, '#888', 1.2);
+}
+function drawScooter(o) {
+  const x = o.x - cam;
+  let wob = 0;
+  if (o.wob > 0) { wob = Math.sin(o.wob * 30) * o.wob * .12; o.wob -= 1 / 60; }
+  c.save(); c.translate(x, o.y + o.h); c.rotate(wob);
+  o.fallen ? scooterFallen(o) : scooterUpright(o);
+  c.restore();
+}
+/* ---------------- Near props (world layer, origin = base center on sidewalk) ---------------- */
+function moonTower() {
+  c.strokeStyle = '#8a8fa6'; c.lineWidth = 2;
+  c.beginPath(); c.moveTo(-14, 0); c.lineTo(-2, -380); c.moveTo(14, 0); c.lineTo(2, -380); c.stroke();
+  c.lineWidth = 1;
+  for (let y = 0; y > -370; y -= 26) {
+    const w1 = 14 - (-y / 380) * 12, w2 = 14 - (-(y - 26) / 380) * 12;
+    c.beginPath(); c.moveTo(-w1, y); c.lineTo(w2, y - 26); c.moveTo(w1, y); c.lineTo(-w2, y - 26); c.stroke();
+  }
+  glow(0, -385, 70, 'rgba(210,225,255,.45)');
+  c.fillStyle = '#eef3ff';
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; c.beginPath(); c.arc(Math.cos(a) * 12, -385 + Math.sin(a) * 4, 3, 0, 7); c.fill(); }
+}
+function lamp() {
+  c.fillStyle = '#4a4466'; c.fillRect(-2, -120, 4, 120);
+  c.fillRect(-2, -122, 18, 4);
+  glow(14, -114, 40, 'rgba(255,214,140,.35)');
+  c.fillStyle = '#ffe2a0'; c.fillRect(8, -118, 12, 5);
+}
+function billboard() {
+  // Thomas J. Henry billboard
+  c.fillStyle = '#4c4664'; c.fillRect(-100, -170, 12, 170); c.fillRect(88, -170, 12, 170);
+  c.fillStyle = '#3a3552'; c.fillRect(-170, -158, 340, 6);
+  // light cones
+  c.fillStyle = 'rgba(255,240,190,.10)';
+  for (const lx of [-90, 0, 90]) { c.beginPath(); c.moveTo(lx, -160); c.lineTo(lx - 70, -305); c.lineTo(lx + 70, -305); c.fill(); }
+  c.fillStyle = '#e9e9f2'; c.fillRect(-176, -318, 352, 160);
+  c.fillStyle = '#0f2a5c'; c.fillRect(-170, -312, 340, 148);
+  c.fillStyle = '#c8102e'; c.fillRect(-170, -214, 340, 34);
+  txt('THOMAS J. HENRY', 0, -262, 32, '#ffffff');
+  txt('INJURY ATTORNEYS', 0, -197, 19, '#ffffff');
+  c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(-150, -238, 300, 2);
+  for (const lx of [-90, 0, 90]) { c.fillStyle = '#2b2740'; c.fillRect(lx - 6, -160, 12, 6); glow(lx, -160, 14, 'rgba(255,240,190,.7)'); }
+}
+function motel() {
+  c.fillStyle = '#f2a7c3'; c.fillRect(-150, -70, 300, 70);
+  c.fillStyle = '#3cb9b0'; c.fillRect(-156, -80, 312, 12);
+  for (let i = 0; i < 6; i++) { c.fillStyle = '#5a2e4f'; c.fillRect(-138 + i * 48, -52, 18, 52); c.fillStyle = '#ffd36b'; c.fillRect(-116 + i * 48, -50, 16, 14); }
+  c.fillStyle = '#5a5470'; c.fillRect(150, -230, 8, 230);
+  c.fillStyle = '#2b2740'; rr(122, -320, 64, 110, 30); c.fill();
+  c.strokeStyle = '#ff5fa2'; c.lineWidth = 3; rr(122, -320, 64, 110, 30); c.stroke();
+  const L = 'AUSTIN';
+  for (let i = 0; i < L.length; i++) txt(L[i], 154, -302 + i * 15, 13, i % 2 ? '#ffd36b' : '#7cf2e6');
+  c.fillStyle = '#ff5fa2'; rr(90, -205, 128, 30, 6); c.fill();
+  txt('MOTEL', 154, -190, 20, Math.sin(t * 5) > -.6 ? '#fff' : '#ffc0dc');
+}
+function mural() {
+  c.fillStyle = '#8a7d6c'; c.fillRect(-170, -160, 340, 160);
+  c.fillStyle = '#7fc6e8'; c.fillRect(-160, -150, 320, 125);
+  c.fillStyle = '#f4f0e6'; c.fillRect(-160, -150, 320, 6);
+  c.save(); c.translate(0, -125); c.rotate(-.05);
+  txt('Greetings from', -70, 0, 16, '#d33b5b', 'center', 'Georgia,serif');
+  c.restore();
+  const L = 'AUSTIN', cols = ['#f2a33a', '#d33b5b', '#4a7fd1', '#5ab95e', '#9b5bd4', '#f2c94c'];
+  c.font = `52px ${FONT}`; c.textAlign = 'center'; c.textBaseline = 'middle';
+  for (let i = 0; i < 6; i++) {
+    const x = -125 + i * 50;
+    c.fillStyle = '#1b2240'; c.fillText(L[i], x + 3, -63);
+    c.fillStyle = cols[i]; c.fillText(L[i], x, -66);
+  }
+  c.fillStyle = '#ffd36b'; c.fillRect(-160, -30, 320, 5);
+}
+function paramount() {
+  c.fillStyle = '#e8dcc6'; c.fillRect(-130, -190, 260, 190);
+  c.fillStyle = '#cfc0a6'; c.fillRect(-130, -190, 260, 10);
+  windows(-120, -175, 240, 70, 8, 2, '#ffe1a0', .9, 88);
+  c.fillStyle = '#2b2740'; c.fillRect(-140, -95, 280, 30);
+  for (let i = 0; i < 28; i++) { const on = ((i + Math.floor(t * 8)) % 3) === 0; c.fillStyle = on ? '#fff3b0' : '#b88a3a'; c.beginPath(); c.arc(-135 + i * 10, -98, 2.4, 0, 7); c.fill(); }
+  txt('TONIGHT: DILLO DASH', 0, -80, 13, '#ffd36b');
+  c.fillStyle = '#5a1e2e'; c.fillRect(-120, -60, 240, 60);
+  c.fillStyle = '#ffcf7a'; c.fillRect(-100, -50, 60, 50); c.fillRect(40, -50, 60, 50);
+  c.fillStyle = '#c4162a'; rr(95, -330, 40, 225, 6); c.fill();
+  c.strokeStyle = '#ffd36b'; c.lineWidth = 2; rr(95, -330, 40, 225, 6); c.stroke();
+  const L = 'PARAMOUNT';
+  for (let i = 0; i < L.length; i++) txt(L[i], 115, -315 + i * 24, 17, '#fff5d0');
+}
+function sixthStreet() {
+  c.fillStyle = '#6d4a3a'; c.fillRect(-220, -140, 140, 140); c.fillStyle = '#4a3f6e'; c.fillRect(-80, -160, 120, 160); c.fillStyle = '#7a5a3a'; c.fillRect(40, -130, 150, 130);
+  windows(-215, -130, 130, 60, 5, 2, '#ffd36b', .9, 6); windows(-75, -150, 110, 70, 4, 2, '#ffd36b', .9, 7); windows(45, -120, 140, 50, 5, 2, '#ffd36b', .9, 8);
+  const neon = [['LIVE MUSIC', -150, '#ff5fa2'], ['BBQ', -20, '#7cf2e6'], ['BLUES', 115, '#ffd36b']];
+  for (const [s, x, col] of neon) { c.fillStyle = '#1a1230'; rr(x - 50, -62, 100, 24, 4); c.fill(); const on = Math.sin(t * 6 + x) > -.8; txt(s, x, -50, 13, on ? col : '#555'); }
+  c.fillStyle = '#6b6b80'; c.fillRect(205, -150, 5, 150);
+  c.fillStyle = '#1f7a3f'; c.fillRect(170, -158, 80, 20); txt('E 6TH ST', 210, -148, 12, '#fff');
+}
+function raineySt() {
+  for (let i = 0; i < 3; i++) {
+    const x = -200 + i * 140, col = ['#e2b07a', '#9ccdb0', '#e78f8f'][i];
+    c.fillStyle = col; c.fillRect(x, -90, 110, 90);
+    c.fillStyle = '#5a3a3a'; c.beginPath(); c.moveTo(x - 8, -90); c.lineTo(x + 55, -135); c.lineTo(x + 118, -90); c.fill();
+    c.fillStyle = '#ffd36b'; c.fillRect(x + 15, -65, 25, 22); c.fillRect(x + 70, -65, 25, 22);
+    c.fillStyle = '#4a2e2e'; c.fillRect(x + 45, -45, 20, 45);
+  }
+  c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(-210, -100); c.quadraticCurveTo(-60, -60, 220, -100); c.stroke();
+  for (let i = 0; i < 16; i++) { const x = -200 + i * 27, y = -100 + Math.sin((i / 15) * Math.PI) * 30 + 4; glow(x, y, 6, ['rgba(255,120,120,.9)', 'rgba(255,230,120,.9)', 'rgba(120,220,255,.9)'][i % 3]); }
+}
+
+/* ---------------- Street objects ---------------- */
+function drawCone(o) {
+  const x = o.x - cam, wob = o.wob > 0 ? Math.sin(o.wob * 30) * o.wob * .4 : 0;
+  if (o.wob > 0) o.wob -= 1 / 60;
+  c.save(); c.translate(x + o.w / 2, o.y + o.h); c.rotate(wob);
+  c.fillStyle = '#ff7a1a'; c.beginPath(); c.moveTo(-9, -2); c.lineTo(-3, -30); c.lineTo(3, -30); c.lineTo(9, -2); c.fill();
+  c.fillStyle = '#fff'; c.fillRect(-6, -18, 12, 5);
+  c.fillStyle = '#d65a00'; c.fillRect(-13, -3, 26, 3);
+  c.restore();
+}
+function drawTruck(k) {
+  const x = k.x - cam, y = k.y, w = k.w, h = k.h;
+  if (x > VW + 10 || x + w < -10) return;
+  c.fillStyle = k.col; rr(x, y, w, h - 10, 8); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.18)'; c.fillRect(x + 4, y + 2, w - 8, 4);
+  c.fillStyle = '#fff6dc'; c.fillRect(x + 14, y + 12, w * .52, h * .34);
+  c.fillStyle = '#2b1d3a'; c.fillRect(x + 18, y + 16, w * .52 - 8, h * .34 - 8);
+  for (let i = 0; i < 6; i++) { c.fillStyle = i % 2 ? '#fff' : '#e64b6b'; c.fillRect(x + 12 + i * (w * .53 / 6), y + 6, w * .53 / 6, 7); }
+  c.fillStyle = 'rgba(0,0,0,.25)'; c.fillRect(x + w - 34, y + 8, 30, h - 22);
+  c.fillStyle = '#9fd8ff'; c.fillRect(x + w - 26, y + 14, 18, 16);
+  fitTxt(k.label, x + 14 + w * .26, y + h * .34 + 22, w * .55, 13, '#fff');
+  c.fillStyle = '#1b1527'; c.beginPath(); c.arc(x + 30, y + h - 9, 10, 0, 7); c.arc(x + w - 30, y + h - 9, 10, 0, 7); c.fill();
+  c.fillStyle = '#888'; c.beginPath(); c.arc(x + 30, y + h - 9, 4, 0, 7); c.arc(x + w - 30, y + h - 9, 4, 0, 7); c.fill();
+}
+function drawTaco(tc, i) {
+  const P = runners[0];
+  if (P && P.taken.has(i)) return;
+  const x = tc.x - cam, y = tc.y + Math.sin(t * 3 + tc.ph) * 5;
+  if (x < -40 || x > VW + 40) return;
+  glow(x + 15, y + 12, 26, 'rgba(255,220,120,.5)');
+  c.fillStyle = '#7bc043'; c.beginPath(); c.arc(x + 15, y + 18, 13, Math.PI, 0); c.fill();
+  c.fillStyle = '#d9412b'; c.fillRect(x + 6, y + 9, 5, 4); c.fillRect(x + 17, y + 7, 5, 4);
+  c.fillStyle = '#f1c86a'; c.beginPath(); c.arc(x + 15, y + 20, 14, Math.PI * 1.02, -.02); c.lineTo(x + 15, y + 20); c.fill();
+  c.strokeStyle = '#c99a3c'; c.lineWidth = 2; c.beginPath(); c.arc(x + 15, y + 20, 14, Math.PI * 1.02, -.02); c.stroke();
+}
+function roadSign(p) {
+  const x = p.x - cam - 70; if (x < -50 || x > VW + 50) return;
+  c.fillStyle = '#5a5470'; c.fillRect(x - 2, GROUND - 70, 4, 70);
+  c.save(); c.translate(x, GROUND - 82); c.rotate(Math.PI / 4);
+  c.fillStyle = '#ff8a1a'; c.fillRect(-16, -16, 32, 32); c.strokeStyle = '#222'; c.lineWidth = 2; c.strokeRect(-13, -13, 26, 26);
+  c.restore();
+  txt('ROAD', x, GROUND - 87, 8, '#222'); txt('WORK', x, GROUND - 78, 8, '#222');
+}
+
+/* ---------------- Armadillo ---------------- */
+function dilloBody(cx, by, color, opts = {}) {
+  const { anim = t, grounded = true, stumble = 0, vy = 0, boost = 0, s = 1 } = opts;
+  c.save(); c.translate(cx, by); c.scale(s, s);
+  if (boost > 0) {
+    c.strokeStyle = 'rgba(255,230,140,.7)'; c.lineWidth = 2;
+    for (let i = 0; i < 4; i++) { const y = -6 - i * 6, l = 20 + ((t * 300 + i * 37) % 30); c.beginPath(); c.moveTo(-24 - l, y); c.lineTo(-22, y); c.stroke(); }
+  }
+  const rot = stumble > 0 ? Math.sin(stumble * 25) * .25 : (!grounded ? Math.max(-.3, Math.min(.3, vy / 2500)) : 0);
+  c.rotate(rot);
+  const run = grounded ? Math.sin(anim * 24) : .6;
+  c.fillStyle = '#6b4e3a'; c.fillRect(-12 + run * 4, -7, 5, 7); c.fillRect(6 - run * 4, -7, 5, 7);
+  c.fillStyle = '#5a3f2e'; c.fillRect(-8 - run * 4, -7, 5, 7); c.fillRect(10 + run * 4, -7, 5, 7);
+  c.strokeStyle = '#8a6a52'; c.lineWidth = 3; c.lineCap = 'round';
+  c.beginPath(); c.moveTo(-18, -10); c.quadraticCurveTo(-28, -10, -32, -4 + run * 2); c.stroke();
+  c.lineCap = 'butt';
+  c.fillStyle = color; c.beginPath(); c.ellipse(-2, -13, 19, 13, 0, Math.PI, 0); c.lineTo(17, -8); c.lineTo(-21, -8); c.fill();
+  c.fillStyle = 'rgba(0,0,0,.18)';
+  for (let i = -2; i <= 2; i++) c.fillRect(-3 + i * 6, -25 + Math.abs(i) * 2, 2, 17 - Math.abs(i) * 2);
+  c.fillStyle = 'rgba(255,255,255,.35)'; c.beginPath(); c.ellipse(-6, -21, 8, 3, -.2, 0, 7); c.fill();
+  c.fillStyle = '#c9a07e'; c.beginPath(); c.moveTo(14, -18); c.quadraticCurveTo(22, -20, 30, -11); c.lineTo(14, -7); c.fill();
+  c.fillStyle = '#ff9fae'; c.beginPath(); c.arc(30, -11, 2.2, 0, 7); c.fill();
+  c.fillStyle = '#c9a07e'; c.beginPath(); c.ellipse(15, -21, 3, 5, -.4, 0, 7); c.fill();
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(20, -15, 3, 0, 7); c.fill();
+  c.fillStyle = '#111'; c.beginPath(); c.arc(21, -15, 1.6, 0, 7); c.fill();
+  c.restore();
+}
+function drawDillo(r) {
+  if (r.respawn > 0) return;
+  if (r.blink > 0 && Math.floor(t * 14) % 2) return;
+  const cx = r.x - cam + r.w / 2, by = r.y + r.h;
+  if (cx < -60 || cx > VW + 60) return;
+  dilloBody(cx, by, r.color, r);
+  if (r.stumble > 0) for (let i = 0; i < 3; i++) { const a = t * 8 + i * 2.1; txt('*', cx + Math.cos(a) * 16, by - 38 + Math.sin(a) * 4, 16, '#ffe066'); }
+  if (!r.human && runners.some(o => o !== r && o.respawn <= 0 && Math.abs(o.x - r.x) < 46 && Math.abs(o.y - r.y) < 40 && (o.human || o.slot < r.slot))) return;
+  c.font = `11px ${FONT}`; const tw = c.measureText(r.tag).width + 10, up = r.human ? 4 : 0;
+  c.fillStyle = r.human ? r.color : 'rgba(20,10,40,.6)';
+  rr(cx - tw / 2, by - 52 - up, tw, 15, 7); c.fill();
+  txt(r.tag, cx, by - 44 - up, 11, r.human ? '#1a0f30' : '#fff');
+  if (r.human) { c.fillStyle = r.color; c.beginPath(); c.moveTo(cx - 5, by - 41); c.lineTo(cx + 5, by - 41); c.lineTo(cx, by - 35); c.fill(); }
+}
+
+/* ---------------- Render ---------------- */
+function render() {
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  c.fillStyle = '#120826'; c.fillRect(0, 0, cv.width, cv.height);
+  c.setTransform(scale, 0, 0, scale, 0, offY);
+  c.save(); c.beginPath(); c.rect(0, 0, VW, H); c.clip();
+
+  const g = c.createLinearGradient(0, 0, 0, GROUND);
+  g.addColorStop(0, '#170a3a'); g.addColorStop(.45, '#4a2380'); g.addColorStop(.8, '#b84f8c'); g.addColorStop(1, '#f39a6b');
+  c.fillStyle = g; c.fillRect(0, 0, VW, GROUND);
+  for (const s of stars) { c.globalAlpha = .4 + .6 * Math.abs(Math.sin(t * 1.5 + s.p)); c.fillStyle = '#fff'; c.fillRect(s.x * VW, s.y * GROUND, s.s, s.s); }
+  c.globalAlpha = 1;
+  glow(VW * .82, 85, 90, 'rgba(255,240,210,.25)');
+  c.fillStyle = '#fff3dc'; c.beginPath(); c.arc(VW * .82, 85, 30, 0, 7); c.fill();
+  c.fillStyle = 'rgba(220,200,180,.5)'; c.beginPath(); c.arc(VW * .82 - 9, 78, 6, 0, 7); c.arc(VW * .82 + 10, 94, 4, 0, 7); c.fill();
+
+  const fo = cam * FAR_F;
+  for (const b of farB) {
+    const x = b.x - fo; if (x > VW || x + b.w < 0) continue;
+    c.fillStyle = '#6c3a8e'; c.fillRect(x, GROUND - b.h - 20, b.w, b.h + 20);
+    windows(x + 2, GROUND - b.h - 14, b.w - 4, b.h, Math.max(2, b.w / 10 | 0), b.h / 16 | 0, 'rgba(255,215,150,.35)', .3, b.seed);
+  }
+  const mo = cam * MID_F;
+  for (const b of fillers) {
+    const x = b.x - mo; if (x > VW || x + b.w < 0) continue;
+    c.fillStyle = b.col; c.fillRect(x, GROUND - b.h, b.w, b.h);
+    c.fillStyle = 'rgba(255,255,255,.07)'; c.fillRect(x, GROUND - b.h, 6, b.h);
+    if (b.roof === 1) { c.fillRect(x + b.w * .3, GROUND - b.h - 14, b.w * .4, 14); }
+    if (b.roof === 2) line(x + b.w / 2, GROUND - b.h, x + b.w / 2, GROUND - b.h - 26, '#8a7cb8', 1.5);
+    if (b.roof === 3) { c.fillStyle = '#6b5a8f'; c.fillRect(x + b.w - 22, GROUND - b.h - 16, 14, 12); c.fillRect(x + b.w - 20, GROUND - b.h - 4, 2, 4); c.fillRect(x + b.w - 12, GROUND - b.h - 4, 2, 4); }
+    windows(x + 3, GROUND - b.h + 6, b.w - 6, b.h - 10, Math.max(2, b.w / 11 | 0), Math.max(2, b.h / 15 | 0), '#ffd98a', .45, b.seed);
+  }
+  for (const l of landmarks) {
+    const x = l.x - mo, half = (l.vis || l.w) / 2;
+    if (x - half - 80 > VW || x + half + 80 < 0) continue;
+    c.save(); c.translate(x, GROUND); l.draw(); c.restore();
+  }
+  const hz = c.createLinearGradient(0, GROUND - 120, 0, GROUND);
+  hz.addColorStop(0, 'rgba(243,154,107,0)'); hz.addColorStop(1, 'rgba(243,154,107,.18)');
+  c.fillStyle = hz; c.fillRect(0, GROUND - 120, VW, 120);
+
+  for (const lx of lamps) { const x = lx - cam; if (x < -60 || x > VW + 60) continue; c.save(); c.translate(x, GROUND); lamp(); c.restore(); }
+  for (const p of nearProps) { const x = p.x - cam; if (x < -260 || x > VW + 260) continue; c.save(); c.translate(x, GROUND); p.draw(); c.restore(); }
+  for (const p of pits) roadSign(p);
+
+  c.fillStyle = '#9a8fb8'; c.fillRect(0, GROUND, VW, 16);
+  c.fillStyle = '#c3badc'; c.fillRect(0, GROUND, VW, 3);
+  c.fillStyle = 'rgba(60,40,90,.35)'; for (let x = -(cam % 60); x < VW; x += 60) c.fillRect(x, GROUND + 3, 2, 13);
+  c.fillStyle = '#5f557d'; c.fillRect(0, GROUND + 16, VW, 6);
+  c.fillStyle = '#2a2440'; c.fillRect(0, GROUND + 22, VW, H - GROUND - 22);
+  c.fillStyle = '#f2c94c'; for (let x = -(cam % 120); x < VW; x += 120) c.fillRect(x, GROUND + 72, 60, 5);
+  for (const p of pits) {
+    const x = p.x - cam; if (x > VW || x + p.w < 0) continue;
+    c.fillStyle = '#0b0614'; c.fillRect(x, GROUND, p.w, H - GROUND);
+    c.fillStyle = '#6b4a2f'; c.fillRect(x, GROUND, 6, H - GROUND); c.fillRect(x + p.w - 6, GROUND, 6, H - GROUND);
+    for (let i = 0; i < p.w; i += 16) { c.fillStyle = (i / 16) % 2 ? '#fff' : '#ff7a1a'; c.fillRect(x + i, GROUND - 3, Math.min(16, p.w - i), 3); }
+  }
+  { const x = START_X + 44 - cam; if (x > -20 && x < VW) { c.fillStyle = '#fff'; c.fillRect(x, GROUND, 6, 22); } }
+  { const x = TRACK - cam;
+    if (x > -120 && x < VW + 120) {
+      for (let i = 0; i < 8; i++) for (let j = 0; j < 2; j++) { c.fillStyle = (i + j) % 2 ? '#111' : '#fff'; c.fillRect(x + j * 8, GROUND + i * 2.75, 8, 2.75); }
+      c.fillStyle = '#ddd'; c.fillRect(x - 4, GROUND - 200, 6, 200); c.fillRect(x + 60, GROUND - 200, 6, 200);
+      for (let i = 0; i < 14; i++) for (let j = 0; j < 2; j++) { c.fillStyle = (i + j) % 2 ? '#111' : '#fff'; c.fillRect(x - 40 + i * 10, GROUND - 230 + j * 10, 10, 10); }
+      c.fillStyle = '#c8102e'; c.fillRect(x - 40, GROUND - 210, 140, 22); txt('FINISH', x + 30, GROUND - 199, 15, '#fff');
+    }
+  }
+  for (const k of trucks) drawTruck(k);
+  for (const h of hazards) { const x = h.x - cam; if (x < -100 || x > VW + 60) continue; h.type === 'cone' ? drawCone(h) : drawScooter(h); }
+  for (let i = 0; i < tacos.length; i++) drawTaco(tacos[i], i);
+  for (let i = runners.length - 1; i >= 0; i--) drawDillo(runners[i]);
+
+  drawHUD();
+  c.restore();
+}
+
+function drawQR(slot, x, y, size) {
+  const q = qrCanvases[slot]; if (!q) return;
+  c.fillStyle = '#fff'; rr(x - 6, y - 6, size + 12, size + 12, 8); c.fill();
+  c.imageSmoothingEnabled = false; c.drawImage(q, x, y, size, size); c.imageSmoothingEnabled = true;
+}
+
+function drawLobby() {
+  c.fillStyle = 'rgba(15,6,35,.62)'; c.fillRect(0, 0, VW, H);
+  const cx = VW / 2;
+  txt('DILLO DASH', cx + 3, 52, 50, '#2b0f4a');
+  txt('DILLO DASH', cx, 49, 50, '#ffb347');
+  txt('AUSTIN, TEXAS  ·  ONE BUTTON: JUMP', cx, 88, 15, '#7cf2e6');
+  const n = 4, gap = 16, cw = Math.min(176, (VW - 60 - gap * (n - 1)) / n), total = cw * n + gap * (n - 1), x0 = cx - total / 2, y0 = 112, ch = 300;
+  const phones = roomStatus === 'ok';
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * (cw + gap), ch_ = CHARS[i], joined = !!slots[i], ready = joined && padReady(i);
+    c.fillStyle = joined ? 'rgba(255,255,255,.14)' : 'rgba(255,255,255,.07)'; rr(x, y0, cw, ch, 14); c.fill();
+    c.strokeStyle = ch_.color; c.lineWidth = joined ? 3 : 1.5; rr(x, y0, cw, ch, 14); c.stroke();
+    txt(`P${i + 1}`, x + 16, y0 + 18, 13, ch_.color, 'left');
+    dilloBody(x + cw / 2 - 4, y0 + 58, ch_.color, { anim: joined ? t : 0, s: 1.25 });
+    txt(ch_.name.toUpperCase(), x + cw / 2, y0 + 78, 17, '#fff');
+    const qs = cw - 44, qy = y0 + 98;
+    if (joined) {
+      c.fillStyle = ready ? 'rgba(124,242,230,.18)' : 'rgba(255,255,255,.06)'; rr(x + 22, qy, qs, qs, 10); c.fill();
+      txt(ready ? '✓' : '📱', x + cw / 2, qy + qs / 2 - 10, ready ? 64 : 44, ready ? '#7cf2e6' : '#fff');
+      txt(ready ? 'READY!' : 'JOINED', x + cw / 2, qy + qs - 18, 16, ready ? '#7cf2e6' : '#ffe08a');
+    } else if (phones || roomStatus === 'connecting') {
+      c.globalAlpha = phones ? 1 : .35; drawQR(i, x + 22, qy, qs); c.globalAlpha = 1;
+    } else {
+      c.fillStyle = 'rgba(255,255,255,.05)'; rr(x + 22, qy, qs, qs, 10); c.fill();
+      txt('CPU', x + cw / 2, qy + qs / 2, 26, 'rgba(255,255,255,.35)');
+    }
+    const sub = joined ? (ready ? 'Waiting to start' : 'Tap READY on phone') : phones ? 'Scan to play' : roomStatus === 'connecting' ? 'Connecting…' : (i === 0 ? 'You (keyboard)' : 'Computer');
+    txt(sub, x + cw / 2, y0 + ch - 20, 12, 'rgba(255,255,255,.8)', 'center', 'system-ui,sans-serif');
+  }
+  const jc = slots.filter(Boolean).length, rc = slots.filter((s, i) => s && padReady(i)).length;
+  let msg;
+  if (jc) msg = `${rc}/${jc} racers ready — race starts when everyone taps READY  ·  SPACE / click to start now  ·  empty spots race as CPU`;
+  else if (phones) msg = 'Scan a code with your phone camera to grab an armadillo  ·  or press SPACE / click to race solo';
+  else msg = 'Press SPACE, tap or click to race';
+  c.globalAlpha = .65 + .35 * Math.sin(t * 4);
+  txt(msg, cx, y0 + ch + 30, 14, '#fff', 'center', 'system-ui,sans-serif');
+  c.globalAlpha = 1;
+  const note = phones ? 'Point any phone camera at a code — no app or account needed.'
+    : roomStatus === 'off' ? 'Phone controllers need the game server running (see README).' : '';
+  if (note) txt(note, cx, y0 + ch + 54, 11, 'rgba(255,255,255,.55)', 'center', 'system-ui,sans-serif');
+  if (best !== null) txt(`Best solo time: ${best.toFixed(2)}s`, 20, H - 16, 11, '#7cf2e6', 'left', 'system-ui,sans-serif');
+  txt('M = mute', VW - 16, H - 16, 11, 'rgba(255,255,255,.5)', 'right', 'system-ui,sans-serif');
+}
+
+function drawHUD() {
+  if (window.__noHUD) return;
+  if (state === 'lobby') { drawLobby(); return; }
+  const bw = Math.min(460, VW * .46), bx = VW / 2 - bw / 2, by = 22;
+  c.fillStyle = 'rgba(15,6,35,.6)'; rr(bx - 10, by - 12, bw + 34, 24, 12); c.fill();
+  c.fillStyle = 'rgba(255,255,255,.25)'; rr(bx, by - 3, bw, 6, 3); c.fill();
+  for (let i = 0; i < 8; i++) { c.fillStyle = i % 2 ? '#111' : '#fff'; c.fillRect(bx + bw + 4 + (i % 2) * 5, by - 8 + Math.floor(i / 2) * 4, 5, 4); }
+  for (let i = runners.length - 1; i >= 0; i--) {
+    const r = runners[i], f = Math.min(1, (r.x + r.w - START_X) / (TRACK - START_X));
+    c.fillStyle = r.color; c.beginPath(); c.arc(bx + f * bw, by, r.human ? 8 : 6, 0, 7); c.fill();
+    if (r.human) { c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke(); }
+  }
+  if (solo) {
+    const pl = placeOf(runners[0]);
+    txt(ORD[pl], 22, 34, 34, pl === 0 ? '#ffd36b' : '#fff', 'left');
+    txt('PLACE', 24, 60, 10, 'rgba(255,255,255,.7)', 'left');
+  } else {
+    const order = [...runners].sort((a, b) => placeOf(a) - placeOf(b));
+    c.fillStyle = 'rgba(15,6,35,.55)'; rr(10, 10, 168, 18 + order.length * 20, 10); c.fill();
+    order.forEach((r, i) => {
+      const y = 28 + i * 20;
+      txt(String(i + 1), 24, y, 13, i === 0 ? '#ffd36b' : '#fff');
+      c.fillStyle = r.color; c.beginPath(); c.arc(42, y, 6, 0, 7); c.fill();
+      txt(r.tag, 54, y, 12, r.human ? '#fff' : 'rgba(255,255,255,.6)', 'left');
+    });
+  }
+  txt(raceT.toFixed(2) + 's', VW - 20, 30, 20, '#fff', 'right');
+  if (solo && runners[0].boost > 0) txt('TACO BOOST!', VW - 20, 56, 13, '#ffe08a', 'right');
+  if (toast && state === 'race') {
+    const a = Math.min(1, toast.t * 2, (2.6 - toast.t) * 4);
+    c.globalAlpha = a;
+    c.font = `14px ${FONT}`; const w = c.measureText(toast.text).width + 40;
+    c.fillStyle = 'rgba(15,6,35,.7)'; rr(VW / 2 - w / 2, 48, w, 26, 13); c.fill();
+    txt(toast.text, VW / 2, 61, 14, '#7cf2e6');
+    c.globalAlpha = 1;
+  }
+  if (state === 'countdown') {
+    const n = Math.ceil(countdown), f = countdown - Math.floor(countdown);
+    txt(String(n), VW / 2 + 4, 214, 90 + f * 40, '#2b0f4a');
+    txt(String(n), VW / 2, 210, 90 + f * 40, '#ffb347');
+    txt(solo ? 'Hold to jump higher' : 'Phones ready — hold JUMP to jump higher', VW / 2, 290, 16, '#fff', 'center', 'system-ui,sans-serif');
+  }
+  if (goFlash > 0) { c.globalAlpha = Math.min(1, goFlash * 2); txt('GO!', VW / 2, 210, 110, '#7cf2e6'); c.globalAlpha = 1; }
+  if (state === 'race' && solo && runners[0].finished) txt(`You finished ${ORD[finishOrder.indexOf(runners[0])]}!`, VW / 2, 200, 40, '#ffd36b');
+  if (state === 'results') {
+    c.fillStyle = 'rgba(15,6,35,.75)'; c.fillRect(0, 0, VW, H);
+    const cx = VW / 2, w = results[0];
+    let head;
+    if (solo) { const pi = results.indexOf(runners[0]); head = pi === 0 ? 'YOU WIN, AUSTIN!' : `You placed ${ORD[pi]}`; }
+    else head = w.human ? `${w.name.toUpperCase()} (P${w.slot + 1}) WINS!` : `${w.name.toUpperCase()} (CPU) WINS!`;
+    txt(head, cx, 100, 42, '#ffd36b');
+    const medals = ['#ffd36b', '#d9dde8', '#d08a4a', '#7a6f99'];
+    results.forEach((r, i) => {
+      const y = 170 + i * 46;
+      c.fillStyle = r.human ? 'rgba(255,255,255,.16)' : 'rgba(255,255,255,.06)'; rr(cx - 200, y - 19, 400, 38, 10); c.fill();
+      c.fillStyle = medals[i]; c.beginPath(); c.arc(cx - 170, y, 14, 0, 7); c.fill();
+      txt(String(i + 1), cx - 170, y + 1, 14, '#1a0f30');
+      c.fillStyle = r.color; c.beginPath(); c.arc(cx - 132, y, 8, 0, 7); c.fill();
+      txt(r.tag, cx - 114, y, 17, '#fff', 'left');
+      txt(r.finished ? r.ft.toFixed(2) + 's' : 'DNF', cx + 180, y, 16, '#fff', 'right');
+    });
+    if (resultsT > 1) {
+      c.globalAlpha = .6 + .4 * Math.sin(t * 4);
+      txt(solo ? 'PRESS SPACE OR TAP TO RACE AGAIN' : 'Tap READY on your phones for a rematch  ·  SPACE = back to lobby (new players)', cx, 375, solo ? 18 : 14, '#fff');
+      c.globalAlpha = 1;
+    }
+    if (solo && best !== null) txt(`Best time: ${best.toFixed(2)}s`, cx, 405, 14, '#7cf2e6');
+  }
+}
+
+/* ---------------- Phone controllers (WebSocket game server) ---------------- */
+const slots = [false, false, false, false];   // which armadillos have a phone connected
+const padState = [{}, {}, {}, {}];
+const padN = [0, 0, 0, 0];
+let ws = null, code = '', base = location.origin, roomStatus = 'connecting', qrCanvases = [], lastHostJSON = '', lastPushT = 0;
+
+const wsURL = () => (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+function padURL(slot) { return `${base}/?join=${code}-${slot + 1}`; }
+function buildQRs() {
+  qrCanvases = [];
+  if (typeof qrcode !== 'function' || !code) return;
+  for (let i = 0; i < 4; i++) {
+    const q = qrcode(0, 'M'); q.addData(padURL(i)); q.make();
+    const n = q.getModuleCount(), m = 4, pad = 2, oc = document.createElement('canvas');
+    oc.width = oc.height = (n + pad * 2) * m;
+    const o = oc.getContext('2d'); o.fillStyle = '#fff'; o.fillRect(0, 0, oc.width, oc.height); o.fillStyle = '#111';
+    for (let r = 0; r < n; r++) for (let cc = 0; cc < n; cc++) if (q.isDark(r, cc)) o.fillRect((cc + pad) * m, (r + pad) * m, m, m);
+    qrCanvases.push(oc);
+  }
+}
+function padReady(i) { return slots[i] && padState[i].readyFor === round; }
+
+function onPadJoin(i) {
+  slots[i] = true; padN[i] = 0; padState[i] = {}; sfx('join');
+  const r = runners[i];
+  if (r && !solo && state !== 'lobby') { r.human = true; r.base = 330; r.tag = `P${i + 1} ${r.name}`; }
+}
+function onPadLeave(i) {
+  slots[i] = false; padState[i] = {};
+  const r = runners[i];
+  if (r && !solo && state !== 'lobby') { r.human = false; r.held = false; r.tag = `${r.name} · CPU`; r.ai.plan = -1; }
+}
+function onPadInput(i, m) {
+  padState[i] = { n: m.n, held: m.held, readyFor: m.readyFor };
+  const r = runners[i];
+  const live = r && r.human && (state === 'race' || state === 'countdown');
+  if (m.n > padN[i]) { padN[i] = m.n; if (live) r.buf = .14; }
+  if (live) r.held = !!m.held;
+}
+function readPads() {
+  if (state === 'lobby' || (state === 'results' && resultsT > 1.5)) {
+    const joined = [0, 1, 2, 3].filter(i => slots[i]);
+    if (joined.length && joined.every(padReady)) startRace();
+  }
+}
+function pushHost(force) {
+  if (!ws || ws.readyState !== 1) return;
+  const now = performance.now();
+  if (!force && now - lastPushT < 150) return;
+  const places = runners.length && state !== 'lobby' ? runners.map(r => placeOf(r) + 1) : [0, 0, 0, 0];
+  const msg = { t: 'state', st: state, round, places };
+  const j = JSON.stringify(msg);
+  if (j === lastHostJSON && !force) return;
+  lastHostJSON = j; lastPushT = now;
+  ws.send(j);
+}
+function initHost() {
+  if (!/^https?:$/.test(location.protocol)) { roomStatus = 'off'; return; }
+  let opened = false;
+  try { ws = new WebSocket(wsURL()); } catch (e) { roomStatus = 'off'; return; }
+  ws.onopen = () => { opened = true; ws.send(JSON.stringify({ t: 'host', code: code || undefined })); };
+  ws.onmessage = e => {
+    let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+    if (m.t === 'room') {
+      if (m.code !== code || m.base !== base) { code = m.code; base = m.base || location.origin; buildQRs(); }
+      roomStatus = 'ok'; pushHost(true);
+    } else if (m.t === 'pad') {
+      const i = (m.slot | 0) - 1; if (i < 0 || i > 3) return;
+      m.on ? onPadJoin(i) : onPadLeave(i); pushHost(true);
+    } else if (m.t === 'in') {
+      const i = (m.slot | 0) - 1; if (i >= 0 && i < 4 && slots[i]) onPadInput(i, m);
+    }
+  };
+  ws.onclose = () => {
+    ws = null;
+    if (!opened && !code) { roomStatus = 'off'; return; }
+    roomStatus = 'connecting';
+    setTimeout(initHost, 1500);
+  };
+}
+
+/* ---------------- Phone pad page ---------------- */
+function runPad(code_, slot) {
+  hostRunning = false;
+  const ch = CHARS[slot - 1];
+  const el = id => document.getElementById(id);
+  cv.style.display = 'none';
+  el('pad').style.display = 'flex';
+  document.documentElement.style.setProperty('--pc', ch.color);
+  el('padName').textContent = `P${slot} · ${ch.name}`;
+  drawPadDillo(el('padDillo'), ch.color);
+  const status = s => { el('padStatus').textContent = s; };
+  const btn = el('padBtn'), sub = el('padSub');
+  let id = '';
+  try { id = sessionStorage.getItem('dilloPadId') || ''; } catch (_) {}
+  if (!id) { id = Math.random().toString(36).slice(2, 12); try { sessionStorage.setItem('dilloPadId', id); } catch (_) {} }
+  let sock = null, n = 0, held = false, readyFor = -1, hs = null, joined = false, ended = '', hostGone = false;
+  const send = () => { if (sock && sock.readyState === 1 && joined) sock.send(JSON.stringify({ t: 'in', n, held, readyFor })); };
+  const render = () => {
+    if (ended) { status(ended); btn.disabled = true; btn.textContent = '—'; sub.textContent = ''; return; }
+    if (!joined) { status('Connecting to the game…'); btn.disabled = true; return; }
+    if (hostGone || !hs) { status(hostGone ? 'Waiting for the big screen to come back…' : "You're in! Waiting for the big screen…"); btn.disabled = false; btn.textContent = 'READY'; return; }
+    btn.disabled = false;
+    const place = hs.places && hs.places[slot - 1];
+    if (hs.st === 'lobby' || hs.st === 'results') {
+      const isReady = readyFor === hs.round;
+      btn.textContent = isReady ? 'READY ✓' : 'READY';
+      btn.classList.toggle('ready', isReady);
+      if (hs.st === 'results') status(place ? `You finished ${ORD[place - 1]}! ${isReady ? 'Waiting for the others…' : 'Tap READY for a rematch.'}` : 'Race over!');
+      else status(isReady ? "You're ready! Waiting for the other racers…" : "You're in! Tap READY when you're set.");
+      sub.textContent = 'Watch the big screen';
+    } else {
+      btn.classList.remove('ready');
+      btn.textContent = 'JUMP';
+      status(hs.st === 'countdown' ? 'Get set… tap to jump, hold to jump higher' : (place ? `Racing — you're ${ORD[place - 1]}` : 'GO!'));
+      sub.textContent = 'Tap = hop · Hold = big jump';
+    }
+  };
+  function connect() {
+    try { sock = new WebSocket(wsURL()); } catch (e) { ended = "Couldn't reach the game. Check your connection and scan again."; render(); return; }
+    sock.onopen = () => sock.send(JSON.stringify({ t: 'join', code: code_, slot, id }));
+    sock.onmessage = e => {
+      let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+      if (m.t === 'joined') { joined = true; n = 0; held = false; hostGone = false; }
+      else if (m.t === 'taken') ended = 'Someone already grabbed this armadillo. Scan a different code on the big screen.';
+      else if (m.t === 'noroom') ended = "This game isn't running anymore. Scan the code on the big screen again.";
+      else if (m.t === 'state') { hs = m; hostGone = false; }
+      else if (m.t === 'hostgone') hostGone = true;
+      render();
+    };
+    sock.onclose = () => { joined = false; if (!ended) { render(); setTimeout(connect, 1000); } };
+  }
+  const down = e => {
+    e.preventDefault();
+    if (btn.disabled) return;
+    n++; held = true;
+    if (hs && (hs.st === 'lobby' || hs.st === 'results')) readyFor = hs.round;
+    send(); btn.classList.add('down');
+    try { navigator.vibrate && navigator.vibrate(15); } catch (_) {}
+    render();
+  };
+  const up = () => { if (!held) return; held = false; send(); btn.classList.remove('down'); };
+  btn.addEventListener('pointerdown', down);
+  addEventListener('pointerup', up); addEventListener('pointercancel', up);
+  btn.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && (!sock || sock.readyState > 1) && !ended) connect(); });
+  render(); connect();
+}
+function drawPadDillo(canvas, color) {
+  const pc = canvas.getContext('2d'), k = 6;
+  canvas.width = 80 * k; canvas.height = 40 * k;
+  const old = c; c = pc;
+  pc.scale(k, k); dilloBody(40, 36, color, { anim: 0 });
+  c = old;
+}
+
+/* ---------------- Input (host screen) ---------------- */
+function press() {
+  if (state === 'lobby') { startRace(); return; }
+  if (state === 'results') { if (resultsT > 1) { if (solo) startRace(); else { state = 'lobby'; pushHost(true); } } return; }
+  if (solo) { const P = runners[0]; P.buf = .13; P.held = true; }
+}
+function release() { if (solo && runners[0]) runners[0].held = false; }
+const JUMP_KEYS = [' ', 'Spacebar', 'ArrowUp', 'w', 'W', 'Enter'];
+
+/* ---------------- Boot ---------------- */
+let hostRunning = true;
+function bootHost() {
+  addEventListener('keydown', e => {
+    if (!hostRunning) return;
+    if (e.key === 'm' || e.key === 'M') { muted = !muted; return; }
+    if (JUMP_KEYS.includes(e.key)) { e.preventDefault(); if (!e.repeat) press(); }
+  });
+  addEventListener('keyup', e => { if (JUMP_KEYS.includes(e.key)) release(); });
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); press(); });
+  addEventListener('pointerup', release);
+  addEventListener('pointercancel', release);
+  addEventListener('blur', release);
+  let last = performance.now(), acc = 0;
+  const STEP = 1 / 120;
+  function frame(now) {
+    if (!hostRunning) return;
+    const dt = Math.min(.05, (now - last) / 1000); last = now; t += dt; acc += dt;
+    readPads();
+    while (acc >= STEP) { update(STEP); acc -= STEP; }
+    pushHost(false);
+    render();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+  initHost();
+}
+function route() {
+  const q = new URLSearchParams(location.search).get('join') || (location.hash || '').replace(/^#join-/, '');
+  const m = /^([a-z0-9]{4,8})-([1-4])$/.exec(q || '');
+  if (m) { runPad(m[1], +m[2]); return true; }
+  return false;
+}
+if (!route()) bootHost();
+
+window.__game = {
+  get state() { return state; }, get runners() { return runners; }, get obstacles() { return obstacles; },
+  get cam() { return cam; }, set cam(v) { cam = v; }, get slots() { return slots; }, get code() { return code; }, get base() { return base; }, padURL,
+  get roomStatus() { return roomStatus; }, press, release, startRace
+};
+</script>
+</body></html>

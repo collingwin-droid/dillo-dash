@@ -1,0 +1,11 @@
+{
+  "name": "dillo-dash-austin",
+  "version": "1.0.0",
+  "description": "Dillo Dash: Austin — a one-button party runner. Phones scan a QR code to become controllers.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "ws": "^8.18.0" },
+  "license": "UNLICENSED",
+  "private": true
+}
